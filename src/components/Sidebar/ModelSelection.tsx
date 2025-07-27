@@ -125,7 +125,7 @@ export const ModelSelection: React.FC<ModelSelectionProps> = ({ onScrollToApiKey
       )}
       
       {providerGroups.map((group) => {
-        const isAvailable = isProviderAvailable(group.id);
+        // const isAvailable = isProviderAvailable(group.id);
         
         return (
           <div key={group.id} className="border border-gray-200 dark:border-gray-600 rounded-lg">

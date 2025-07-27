@@ -307,7 +307,7 @@ const RightSidebar: React.FC<RightSidebarProps> = ({
               {/* 对话历史 */}
               {currentSessionData?.messages && currentSessionData.messages.length > 0 ? (
                 <div className="space-y-0">
-                  {currentSessionData.messages.map((message, index) => (
+                  {currentSessionData.messages.map((message: any, index: number) => (
                     <div key={message.id}>
                       {/* 用户消息 */}
                       <div className="p-4">
@@ -320,7 +320,7 @@ const RightSidebar: React.FC<RightSidebarProps> = ({
                           </div>
                           {message.images && message.images.length > 0 && (
                             <div className="mt-2 flex flex-wrap gap-2">
-                              {message.images.map((image, imgIndex) => (
+                              {message.images.map((image: any, imgIndex: number) => (
                                 <img
                                   key={imgIndex}
                                   src={image}

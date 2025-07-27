@@ -6,7 +6,7 @@ import { fileURLToPath, URL } from 'node:url'
 // https://vitejs.dev/config/
 export default defineConfig({
   plugins: [react()],
-  base: '/',
+  base: '/ModelBench/',
   resolve: {
     alias: {
       '@': fileURLToPath(new URL('./src', import.meta.url)),
@@ -21,4 +21,4 @@ export default defineConfig({
     assetsDir: 'assets',
     sourcemap: false,
   },
-}) 
+})

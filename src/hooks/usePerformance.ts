@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useMemo, useState } from 'react';
 import { logger } from '@/utils/logger';
 
 // 性能监控hook
@@ -165,4 +165,15 @@ export function useVirtualization(
       offsetY: startIndex * itemHeight
     };
   }, [itemCount, itemHeight, containerHeight, scrollTop]);
-} 
+}
+
+// 性能监控高阶组件
+export function withPerformanceMonitor<P extends object>(
+  componentName: string,
+  Component: React.ComponentType<P>
+): React.ComponentType<P> {
+  return function PerformanceMonitoredComponent(props: P) {
+    usePerformanceMonitor(componentName);
+    return React.createElement(Component, props);
+  };
+}

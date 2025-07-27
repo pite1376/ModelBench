@@ -4,7 +4,7 @@ import App from './App.tsx'
 import './index.css'
 import { ErrorBoundary } from './utils/errorBoundary'
 import { logger } from './utils/logger'
-import { useAppStore } from './store'
+// import { useAppStore } from './store'
 
 // 全局错误处理
 window.addEventListener('error', (event) => {
@@ -60,4 +60,4 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
       <App />
     </ErrorBoundary>
   </React.StrictMode>,
-) 
+)

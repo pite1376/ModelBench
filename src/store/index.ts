@@ -776,7 +776,7 @@ export const useAppStore = create<AppStore>()(
       // 消息操作
       addMessage: (content, images) => {
         const state = get();
-        const { createNewSession, generateSessionTitle, pageMode } = state;
+        const { createNewSession, generateSessionTitle } = state;
         const currentSession = state.pageMode === 'advanced' ? state.advancedCurrentSession : state.simpleCurrentSession;
         
         if (!currentSession) {
@@ -1369,7 +1369,7 @@ export const useAppStore = create<AppStore>()(
         localStorage.setItem('registered_users', JSON.stringify(users));
         
         // 更新注册统计
-        const stats = get().getRegistrationStats();
+        // const stats = get().getRegistrationStats();
         const today = new Date().toDateString();
         const registrationHistory = JSON.parse(localStorage.getItem('registration_history') || '[]');
         registrationHistory.push({ date: today, userId: newUser.id });

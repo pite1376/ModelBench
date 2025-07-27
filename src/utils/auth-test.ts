@@ -6,11 +6,11 @@ export const testAPIPermissions = async () => {
   
   try {
     // 测试1：检查当前用户角色
-    const { data: { user }, error: userError } = await supabase.auth.getUser();
+    const { data: { user } } = await supabase.auth.getUser();
     console.log('当前用户:', user ? '已认证' : '匿名用户');
     
     // 测试2：尝试简单的SELECT操作
-    const { data: selectData, error: selectError } = await supabase
+    const { error: selectError } = await supabase
       .from('users')
       .select('count', { count: 'exact' })
       .limit(1);
@@ -78,7 +78,7 @@ export const reinitializeUser = async () => {
     // 强制重新初始化用户
     await initUser();
     
-    const { currentUser, cloudSyncStatus } = useAppStore.getState();
+    const { currentUser } = useAppStore.getState();
     
     if (currentUser && currentUser.id !== 'LOCAL_MODE') {
       console.log('✅ 成功切换到云端模式，用户ID:', currentUser.id);
@@ -107,4 +107,4 @@ if (typeof window !== 'undefined') {
   console.log('💡 控制台命令:');
   console.log('  __testAPIPermissions() - 测试API权限');
   console.log('  __reinitializeUser() - 重新初始化用户（切换到云端模式）');
-} 
+}

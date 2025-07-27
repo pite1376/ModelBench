@@ -248,7 +248,7 @@ export const ModelResponseMatrix: React.FC<ModelResponseMatrixProps> = ({
                           </div>
                           <div>
                             <div className="text-xs font-medium text-gray-900 dark:text-white">{model.name}</div>
-                            <div className="text-xs text-gray-600 dark:text-gray-400">{PROVIDERS[model.provider]?.name || model.provider}</div>
+                            <div className="text-xs text-gray-600 dark:text-gray-400">{PROVIDERS[model.provider as keyof typeof PROVIDERS]?.name || model.provider}</div>
                           </div>
                         </div>
 

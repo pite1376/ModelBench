@@ -6,7 +6,7 @@ export const quickDBTest = async () => {
   
   // 测试1：基础连接
   try {
-    const { data, error } = await supabase
+    const { error } = await supabase
       .from('users')
       .select('count', { count: 'exact' })
       .limit(1);
@@ -35,4 +35,4 @@ export const quickDBTest = async () => {
 if (typeof window !== 'undefined') {
   (window as any).__quickDBTest = quickDBTest;
   console.log('💡 在控制台运行 __quickDBTest() 可快速测试数据库连接');
-} 
+}

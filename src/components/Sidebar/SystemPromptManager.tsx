@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useAppStore } from '@/store';
-import { Plus, Edit2, Trash2, Check, X, Download, Maximize2, Minimize2, ChevronDown, ChevronRight, Search, Play } from 'lucide-react';
+import { Plus, Edit2, Trash2, Check, X, Download, Maximize2, Minimize2, ChevronDown, ChevronRight, Search } from 'lucide-react';
 
 interface PromptVersion {
   name: string;
@@ -14,9 +14,9 @@ export const SystemPromptManager: React.FC = () => {
     addSystemPromptTheme, 
     updateSystemPromptTheme, 
     deleteSystemPromptTheme,
-    addVersionToTheme,
+    // addVersionToTheme,
     updateThemeVersion,
-    deleteThemeVersion,
+    // deleteThemeVersion,
     toggleSystemPromptTheme 
   } = useAppStore();
   

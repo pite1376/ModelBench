@@ -331,11 +331,11 @@ function App() {
       return;
     }
 
-    setSelectedFiles(prev => [...prev, ...imageFiles].slice(0, 5));
+    setSelectedFiles([...selectedFiles, ...imageFiles].slice(0, 5));
   };
 
   const removeFile = (index: number) => {
-    setSelectedFiles(prev => prev.filter((_, i) => i !== index));
+    setSelectedFiles(selectedFiles.filter((_, i: number) => i !== index));
   };
 
   // 清空历史确认
@@ -1264,7 +1264,7 @@ function App() {
 
                 const finalResponse = {
                   content: response.content,
-                  reasoning_content: response.reasoning_content || '',
+                  reasoning_content: (response as any).reasoning_content || '',
                   isComplete: true,
                   timestamp: new Date(),
                   tokenCount: response.tokenCount || response.tokens || 0,
