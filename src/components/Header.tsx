@@ -1,9 +1,61 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useAppStore } from '@/store';
+import { PageMode } from '@/types';
 import { formatTokens, formatCost } from '@/utils/helpers';
 import { Settings, Download, Upload, RotateCcw } from 'lucide-react';
 
-const Header: React.FC = () => {
+interface ModeSwitchProps {
+  onModeChange: (mode: PageMode, callback: () => void) => void;
+}
+
+export const ModeSwitch: React.FC<ModeSwitchProps> = ({ onModeChange }) => {
+  const { pageMode } = useAppStore();
+  const [isTransitioning, setIsTransitioning] = useState(false);
+
+  const handleModeSwitch = (newMode: PageMode) => {
+    if (newMode === pageMode || isTransitioning) return;
+    
+    setIsTransitioning(true);
+    onModeChange(newMode, () => {
+      setIsTransitioning(false);
+    });
+  };
+
+  return (
+    <div className="flex items-center bg-gray-100 dark:bg-gray-700 rounded-lg p-1">
+      <button
+        onClick={() => handleModeSwitch('simple')}
+        disabled={isTransitioning}
+        className={`
+          px-4 py-2 rounded-md text-sm font-medium transition-all duration-300 ease-in-out
+          ${pageMode === 'simple' 
+            ? 'bg-white dark:bg-gray-800 text-blue-600 shadow-sm' 
+            : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white'
+          }
+          ${isTransitioning ? 'opacity-50 cursor-not-allowed' : ''}
+        `}
+      >
+        简单模式
+      </button>
+      <button
+        onClick={() => handleModeSwitch('advanced')}
+        disabled={isTransitioning}
+        className={`
+          px-4 py-2 rounded-md text-sm font-medium transition-all duration-300 ease-in-out
+          ${pageMode === 'advanced' 
+            ? 'bg-white dark:bg-gray-800 text-blue-600 shadow-sm' 
+            : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white'
+          }
+          ${isTransitioning ? 'opacity-50 cursor-not-allowed' : ''}
+        `}
+      >
+        高级模式
+      </button>
+    </div>
+  );
+};
+
+export const Header: React.FC = () => {
   const { 
     totalTokens, 
     totalCost, 
@@ -117,6 +169,4 @@ const Header: React.FC = () => {
       </div>
     </header>
   );
-};
-
-export default Header; 
+}; 

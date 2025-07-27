@@ -154,10 +154,19 @@ export class DeepSeekService extends AIService {
               try {
                 const parsed = JSON.parse(data);
                 const delta = parsed.choices?.[0]?.delta?.content || '';
+                
+                // 检查是否有reasoning_content字段（真实API返回）
+                if (parsed.choices?.[0]?.delta?.reasoning_content) {
+                  const reasoningDelta = parsed.choices?.[0]?.delta?.reasoning_content;
+                  console.log(`🧠 DeepSeek Reasoning 块 ${chunkCount}:`, JSON.stringify(reasoningDelta));
+                  onChunk({ content: '', reasoning_content: reasoningDelta, finished: false });
+                }
+                
                 if (delta) {
                   chunkCount++;
                   content += delta;
                   console.log(`📝 DeepSeek 流式块 ${chunkCount}:`, JSON.stringify(delta));
+                  
                   // 立即调用回调函数
                   onChunk({ content: delta, finished: false });
                 }
@@ -357,6 +366,12 @@ export class AliyunService extends AIService {
             if (data) {
               try {
                 const parsed = JSON.parse(data);
+                // 检查是否有reasoning_content字段（真实API返回）
+                if (parsed.choices?.[0]?.delta?.reasoning_content) {
+                  const reasoningDelta = parsed.choices?.[0]?.delta?.reasoning_content;
+                  onChunk({ content: '', reasoning_content: reasoningDelta, finished: false });
+                }
+                
                 // 根据阿里云API返回格式解析
                 const delta = parsed.choices?.[0]?.delta?.content || '';
                 if (delta) {
@@ -430,7 +445,7 @@ export class VolcengineService extends AIService {
             { type: 'text', text: msg.content },
             ...msg.images.map(image => ({
               type: 'image_url',
-              image_url: { url: `data:image/jpeg;base64,${image}` },
+              image_url: { url: image }, // 图片已经是data URL格式
             })),
           ],
         };
@@ -534,6 +549,12 @@ export class VolcengineService extends AIService {
             if (data) {
               try {
                 const parsed = JSON.parse(data);
+                // 检查是否有reasoning_content字段（真实API返回）
+                if (parsed.choices?.[0]?.delta?.reasoning_content) {
+                  const reasoningDelta = parsed.choices?.[0]?.delta?.reasoning_content;
+                  onChunk({ content: '', reasoning_content: reasoningDelta, finished: false });
+                }
+                
                 const delta = parsed.choices?.[0]?.delta?.content || '';
                 if (delta) {
                   content += delta;
@@ -708,10 +729,17 @@ export class KimiService extends AIService {
               try {
                 const parsed = JSON.parse(data);
                 const delta = parsed.choices?.[0]?.delta?.content || '';
+                // 检查是否有reasoning_content字段（真实API返回）
+                if (parsed.choices?.[0]?.delta?.reasoning_content) {
+                  const reasoningDelta = parsed.choices?.[0]?.delta?.reasoning_content;
+                  onChunk({ content: '', reasoning_content: reasoningDelta, finished: false });
+                }
+                
                 if (delta) {
                   chunkCount++;
                   content += delta;
                   console.log(`📝 Kimi 流式块 ${chunkCount}:`, JSON.stringify(delta));
+                  
                   // 立即调用回调函数
                   onChunk({ content: delta, finished: false });
                 }
@@ -753,6 +781,7 @@ export class KimiService extends AIService {
       'moonshot-v1-8k': 12,    // 12美元/1M tokens
       'moonshot-v1-32k': 24,   // 24美元/1M tokens  
       'moonshot-v1-128k': 60,  // 60美元/1M tokens
+      'kimi-k2-0711-preview': 80,  // 80美元/1M tokens (估算)
     };
     
     const pricePerMillion = prices[model] || 12;
@@ -768,8 +797,8 @@ export class ClaudeService extends AIService {
     this.client.defaults.headers['Accept'] = 'application/json'; // Claude specific
   }
 
-  formatMessages(messages: Message[], systemPrompt?: string) {
-    const formattedMessages = [];
+  formatMessages(messages: Message[], systemPrompt?: string): any[] {
+    const formattedMessages: any[] = [];
 
     if (systemPrompt) {
       formattedMessages.push({
@@ -778,12 +807,37 @@ export class ClaudeService extends AIService {
       });
     }
 
-    return formattedMessages.concat(
-      messages.map(msg => ({
+    const mappedMessages = messages.map(msg => {
+      // 如果有图片，使用多模态格式
+      if (msg.images && msg.images.length > 0) {
+        const content = [
+          {
+            type: 'text',
+            text: msg.content
+          },
+          ...msg.images.map(image => ({
+            type: 'image_url',
+            image_url: {
+              url: image,
+              detail: 'auto'
+            }
+          }))
+        ];
+        
+        return {
+          role: msg.role,
+          content
+        };
+      }
+      
+      // 纯文本消息
+      return {
         role: msg.role,
         content: msg.content,
-      }))
-    );
+      };
+    });
+
+    return [...formattedMessages, ...mappedMessages];
   }
 
   async sendMessage(request: ChatRequest): Promise<ChatResponse> {
@@ -890,10 +944,17 @@ export class ClaudeService extends AIService {
               try {
                 const parsed = JSON.parse(data);
                 const delta = parsed.choices?.[0]?.delta?.content || '';
+                // 检查是否有reasoning_content字段（真实API返回）
+                if (parsed.choices?.[0]?.delta?.reasoning_content) {
+                  const reasoningDelta = parsed.choices?.[0]?.delta?.reasoning_content;
+                  onChunk({ content: '', reasoning_content: reasoningDelta, finished: false });
+                }
+                
                 if (delta) {
                   chunkCount++;
                   content += delta;
                   console.log(`📝 Claude 流式块 ${chunkCount}:`, JSON.stringify(delta));
+                  
                   onChunk({ content: delta, finished: false });
                 }
                 if (parsed.usage?.total_tokens) {
@@ -944,7 +1005,9 @@ export class ClaudeService extends AIService {
 
 // 服务工厂
 export class AIServiceFactory {
-  static createService(provider: AIProvider, apiKey: string): AIService {
+  static createService(provider: AIProvider | string, apiKey: string): AIService {
+    // 自动将'doubao'视为'volcengine'，兼容历史/错误用法
+    if (provider === 'doubao') provider = 'volcengine';
     switch (provider) {
       case 'deepseek':
         return new DeepSeekService(apiKey);

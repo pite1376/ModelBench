@@ -96,6 +96,9 @@ export const validateApiKey = (provider: string, key: string): boolean => {
     return false;
   }
 
+  // 自动将'doubao'视为'volcengine'，兼容历史/错误用法
+  if (provider === 'doubao') provider = 'volcengine';
+
   switch (provider) {
     case 'deepseek':
       return key.startsWith('sk-');
