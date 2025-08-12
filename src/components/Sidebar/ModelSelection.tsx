@@ -1,16 +1,19 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { Settings } from 'lucide-react';
 import { useAppStore } from '@/store';
 import { getModelsByProviderGrouped, PROVIDERS } from '@/lib/models';
+import type { ModelConfig } from '@/types';
 // 移除不再使用的图标导入
 import { ModelParametersModal } from './ModelParametersModal';
 import { ApiKeyPromptModal } from '../ApiKeyPromptModal';
+import { ModelManagement } from './ModelManagement';
 
 interface ModelSelectionProps {
   onScrollToApiKey?: (providerId: string) => void;
 }
 
 export const ModelSelection: React.FC<ModelSelectionProps> = ({ onScrollToApiKey }) => {
-  const { getCurrentSelectedModels, toggleModel, apiKeys, pageMode } = useAppStore();
+  const { getCurrentSelectedModels, toggleModel, apiKeys, pageMode, getDisplayedModels, getAllModels } = useAppStore();
   const selectedModels = getCurrentSelectedModels();
   // 移除展开状态管理，因为已有悬浮弹窗显示模型
   const [settingsModal, setSettingsModal] = useState<{ isOpen: boolean; modelId: string }>({ 
@@ -26,6 +29,7 @@ export const ModelSelection: React.FC<ModelSelectionProps> = ({ onScrollToApiKey
     providerId: '',
     position: { x: 0, y: 0 }
   });
+  const [modelManagementOpen, setModelManagementOpen] = useState(false);
   // 移除不再使用的初始化引用
   const hoverTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -41,7 +45,7 @@ export const ModelSelection: React.FC<ModelSelectionProps> = ({ onScrollToApiKey
     // 如果已经选中，可以取消选择
     if (isSelected) return true;
     
-    // 如果是高级模式且已选择3个模型，不能再选择新的
+    // 如果是多提示词模式且已选择3个模型，不能再选择新的
     if (pageMode === 'advanced' && selectedModels.length >= 3) {
       return false;
     }
@@ -113,14 +117,34 @@ export const ModelSelection: React.FC<ModelSelectionProps> = ({ onScrollToApiKey
     };
   }, []);
 
-  const providerGroups = getModelsByProviderGrouped();
+  const displayedModelIds = getDisplayedModels();
+  const allModels = getAllModels();
+  
+  const allProviderGroups = Object.entries(
+    allModels.reduce((groups, model) => {
+      if (!groups[model.provider]) {
+        groups[model.provider] = [];
+      }
+      groups[model.provider].push(model);
+      return groups;
+    }, {} as Record<string, (ModelConfig & { isCustom?: boolean })[]>)
+  );
+  
+  // 只显示在displayedModels中的模型
+  const providerGroups = allProviderGroups
+    .map(([provider, models]) => ({
+      id: provider,
+      name: PROVIDERS[provider as keyof typeof PROVIDERS]?.name || provider,
+      models: models.filter(model => displayedModelIds.includes(model.id))
+    }))
+    .filter(group => group.models.length > 0);
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-2">
       {/* 显示模式和选择限制提示 - 只在有选择限制时显示 */}
       {pageMode === 'advanced' && selectedModels.length >= 3 && (
         <div className="text-xs text-orange-600 dark:text-orange-400 bg-orange-50 dark:bg-orange-900/20 px-1.5 py-1 rounded-md">
-          ⚠️ 高级模式：已达到最多3个模型的选择上限
+          ⚠️ 多提示词模式：已达到最多3个模型的选择上限
         </div>
       )}
       
@@ -164,16 +188,33 @@ export const ModelSelection: React.FC<ModelSelectionProps> = ({ onScrollToApiKey
         );
       })}
       
-      {selectedModels.length === 0 && (
-        <div className="text-xs text-amber-600 bg-amber-50 px-1.5 py-1 rounded-md mt-2">
-          ⚠️ 请至少选择一个模型
-        </div>
-      )}
-
       {/* 显示当前选择状态 */}
       {selectedModels.length > 0 && (
-        <div className="text-xs text-green-600 bg-green-50 px-1.5 py-1 rounded-md mt-2">
-          ✅ 已选择 {selectedModels.length}/{providerGroups.reduce((total, group) => total + group.models.length, 0)} 个模型
+        <div className="flex items-center justify-between text-xs text-green-600 bg-green-50 px-1.5 py-1 rounded-md mt-2">
+          <span>✅ 已选择 {selectedModels.length}/{providerGroups.reduce((total, group) => total + group.models.length, 0)} 个模型</span>
+          <button
+            onClick={() => setModelManagementOpen(true)}
+            className="flex items-center space-x-1 text-blue-600 hover:text-blue-800 ml-2"
+            title="模型管理"
+          >
+            <Settings className="w-3 h-3" />
+            <span>管理</span>
+          </button>
+        </div>
+      )}
+      
+      {/* 当没有选择模型时也显示管理按钮 */}
+      {selectedModels.length === 0 && (
+        <div className="flex items-center justify-between text-xs text-amber-600 bg-amber-50 px-1.5 py-1 rounded-md mt-2">
+          <span>⚠️ 请至少选择一个模型</span>
+          <button
+            onClick={() => setModelManagementOpen(true)}
+            className="flex items-center space-x-1 text-blue-600 hover:text-blue-800 ml-2"
+            title="模型管理"
+          >
+            <Settings className="w-3 h-3" />
+            <span>管理</span>
+          </button>
         </div>
       )}
 
@@ -260,7 +301,7 @@ export const ModelSelection: React.FC<ModelSelectionProps> = ({ onScrollToApiKey
                         <div className="flex items-center space-x-1">
                           <span className="font-medium">{model.name}</span>
                           {model.isReasoner && (
-                            <span className="text-xs text-blue-600 dark:text-blue-400" title="推理模型">🧠</span>
+                            <span className="text-xs text-gray-600 dark:text-gray-400" title="推理模型">🧠</span>
                           )}
                           {model.supportVision && (
                             <span className="text-xs text-green-600 dark:text-green-400" title="支持视觉">👁️</span>
@@ -283,6 +324,12 @@ export const ModelSelection: React.FC<ModelSelectionProps> = ({ onScrollToApiKey
           </div>
         );
       })()}
+      
+      {/* 模型管理弹窗 */}
+      <ModelManagement
+        isOpen={modelManagementOpen}
+        onClose={() => setModelManagementOpen(false)}
+      />
     </div>
   );
 };

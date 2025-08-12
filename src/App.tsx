@@ -1,11 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useAppStore } from '@/store';
 import { chatService } from '@/services/ai-service';
-import { DeepSeekService, AliyunService, VolcengineService, ClaudeService, KimiService } from '@/services/ai-service';
-import { trackEvent } from '@/services/analytics';
+import { DeepSeekService, AliyunService, VolcengineService, ClaudeService, KimiService, BigModelService } from '@/services/ai-service';
+import { analytics } from '@/services/analytics';
 import { AVAILABLE_MODELS, PROVIDERS } from '@/lib/models';
 import { validateApiKey } from '@/utils/helpers';
-import { Send, Settings, MessageSquare, ChevronDown, ChevronRight, Paperclip, Maximize2, Minimize2, Copy, RefreshCw } from 'lucide-react';
+import { Send, Settings, MessageSquare, ChevronDown, ChevronRight, Paperclip, Maximize2, Minimize2, Copy, RefreshCw, X } from 'lucide-react';
 import { AIProvider, ModelResponse, Message, PageMode } from '@/types';
 import useLocalStorage from '@/utils/hooks';
 import { copyWithFeedback } from '@/utils/clipboard';
@@ -45,6 +45,9 @@ import '@/utils/auth-test';
 import { ModelResponseMatrix } from '@/components/ChatInterface/ModelResponseMatrix';
 import { LandingPage } from '@/pages/LandingPage';
 import { LayoutSelector } from '@/components/LayoutSelector';
+import { extractSearchKeywords, performWebSearch, formatSearchResults, shouldPerformWebSearch } from '@/services/webSearchService';
+import { toast, Toaster } from 'sonner';
+import { formatTokenAndCost } from './utils/modelPricing';
 
 interface CollapsibleSectionProps {
   title: React.ReactNode;
@@ -163,7 +166,10 @@ function App() {
     inputMessage,
     setInputMessage,
     selectedFiles,
-    setSelectedFiles
+    setSelectedFiles,
+    getAllModels,
+    isWebSearchEnabled,
+    setWebSearchEnabled
   } = useAppStore();
 
   // 获取当前模式下的选择模型和状态
@@ -175,7 +181,7 @@ function App() {
   const [isTransitioning, setIsTransitioning] = useState(false);
   const [transitionPhase, setTransitionPhase] = useState<'normal' | 'blur-out' | 'blur-in'>('normal');
 
-  // 矩阵响应状态（用于高级模式）
+  // 矩阵响应状态（用于多提示词模式）
   const [matrixResponses, setMatrixResponses] = useState<{ [key: string]: ModelResponse }>({});
   const [matrixIsLoading, setMatrixIsLoading] = useState(false);
 
@@ -212,19 +218,54 @@ function App() {
   // 初始化用户身份
   useEffect(() => {
     initUser();
-  }, [initUser]);
+    // 记录页面访问事件
+    analytics.pageView('app_main');
+  }, []); // Zustand store函数是稳定的，不需要依赖项
 
   // 清理无效的模型选择
   useEffect(() => {
     cleanupSelectedModels();
-    console.log('当前选择的模型:', selectedModels);
-  }, [cleanupSelectedModels]);
+    // 当前选择的模型
+  }, []); // Zustand store函数是稳定的，不需要依赖项
+
+  // 记录模式切换事件
+  useEffect(() => {
+    analytics.userAction('page_mode_changed', {
+      mode: pageMode,
+      timestamp: Date.now()
+    });
+  }, [pageMode]);
 
   // 监听selectedModels变化
   useEffect(() => {
-    console.log('selectedModels已更新:', selectedModels);
-    console.log('模型数量:', selectedModels.length);
+    // selectedModels已更新
   }, [selectedModels]);
+
+  // 页面加载时恢复矩阵响应数据
+  useEffect(() => {
+    if (pageMode === 'advanced' && selectedModels.length > 0 && selectedSystemPromptThemes.length > 0) {
+      rebuildMatrixResponsesFromSession();
+    }
+  }, [pageMode, selectedModels, selectedSystemPromptThemes, currentModeSession]);
+
+  // 页面刷新后恢复当前会话数据
+  useEffect(() => {
+    const currentModeSession = getCurrentSession();
+    if (currentModeSession && !currentSession) {
+      // 如果当前模式有会话但store中的currentSession为空，则恢复它
+      console.log('页面刷新后恢复会话数据:', currentModeSession.id, '模式:', pageMode);
+      
+      // 通过setPageMode来触发currentSession的更新
+      setPageMode(pageMode);
+      
+      if (pageMode === 'advanced' && selectedModels.length > 0 && selectedSystemPromptThemes.length > 0) {
+        // 延迟执行重建矩阵响应，确保currentSession已更新
+        setTimeout(() => {
+          rebuildMatrixResponsesFromSession();
+        }, 100);
+      }
+    }
+  }, [pageMode, getCurrentSession, currentSession, selectedModels, selectedSystemPromptThemes, setPageMode]);
 
   // 检查 URL 参数是否包含管理后台访问标识
   useEffect(() => {
@@ -296,7 +337,7 @@ function App() {
           throw new Error('不支持的提供商');
       }
       
-      const testModel = AVAILABLE_MODELS.find(m => m.provider === provider);
+      const testModel = getAllModels().find(m => m.provider === provider);
       const response = await service.sendMessage({
         model: testModel?.modelId || '',
         messages: [{
@@ -406,11 +447,11 @@ function App() {
     setCurrentLoading(true);
     
     if (pageMode === 'advanced') {
-      // 高级模式：清空矩阵响应并重新生成
+      // 多提示词模式：清空矩阵响应并重新生成
       setMatrixResponses({});
       await handleSendMatrixMessage();
     } else {
-      // 简单模式：清除所有模型对最后一条消息的回复
+      // 单提示词模式：清除所有模型对最后一条消息的回复
       selectedModels.forEach(modelId => {
         // 完全删除该模型对该消息的回复，而不是设置为空内容
         const currentResponses = currentSession.responses[modelId] || {};
@@ -427,8 +468,9 @@ function App() {
     });
 
       // 重新发送给所有选中的模型
+    const startTime = Date.now();
     await Promise.all(selectedModels.map(async (modelId) => {
-      const model = AVAILABLE_MODELS.find(m => m.id === modelId);
+      const model = getAllModels().find(m => m.id === modelId);
       if (!model) return;
 
       const apiKey = getApiKey(model.provider);
@@ -462,6 +504,9 @@ function App() {
           case 'kimi':
             service = new KimiService(apiKey);
             break;
+          case 'bigmodel':
+            service = new BigModelService(apiKey);
+            break;
           default:
             throw new Error('不支持的提供商');
         }
@@ -484,7 +529,12 @@ function App() {
                 updateModelResponse(modelId, lastMessage.id, { 
                  isComplete: true,
                  tokenCount: chunk.tokens || 0,
-                 cost: chunk.cost || 0
+                 cost: chunk.cost || 0,
+                 usage: chunk.usage || {
+                   prompt_tokens: 0,
+                   completion_tokens: chunk.tokens || 0,
+                   total_tokens: chunk.tokens || 0
+                 }
                });
              } else {
                 // 累积流式内容并更新（而不是追加）
@@ -510,7 +560,12 @@ function App() {
              content: response.content,
              isComplete: true,
              tokenCount: response.tokenCount || response.tokens || 0,
-             cost: response.cost || 0
+             cost: response.cost || 0,
+             usage: response.usage || {
+               prompt_tokens: 0,
+               completion_tokens: response.tokenCount || response.tokens || 0,
+               total_tokens: response.tokenCount || response.tokens || 0
+             }
            });
 
            // 更新统计
@@ -521,12 +576,11 @@ function App() {
          }
 
         // 记录分析事件
-          await trackEvent('message_regenerated', {
+        await analytics.chat.messageSent(
           modelId,
-          provider: model.provider,
-            messageLength: lastMessage.content.length,
-            hasImages: (lastMessage.images || []).length > 0
-        });
+          lastMessage.content.length,
+          Date.now() - startTime
+        );
 
       } catch (error: any) {
           updateModelResponse(modelId, lastMessage.id, {
@@ -544,24 +598,24 @@ function App() {
     setCurrentLoading(false);
   };
 
-  // 高级模式下的新建对话处理
+  // 多提示词模式下的新建对话处理
   const handleNewSession = () => {
     if (pageMode === 'advanced') {
-      // 高级模式：清空矩阵响应
+      // 多提示词模式：清空矩阵响应
       setMatrixResponses({});
     }
     // 调用原有的新建对话逻辑
     createNewSession();
   };
 
-  // 高级模式下的单个组合重新生成
+  // 多提示词模式下的单个组合重新生成
   const handleRegenerateMatrixResponse = async (modelId: string, themeId: string, versionId: string) => {
     if (!currentSession || !currentSession.messages.length) return;
     
     const lastMessage = currentSession.messages[currentSession.messages.length - 1];
     if (lastMessage.role !== 'user') return;
 
-    const model = AVAILABLE_MODELS.find(m => m.id === modelId);
+    const model = getAllModels().find(m => m.id === modelId);
     if (!model) return;
 
     const apiKey = getApiKey(model.provider);
@@ -620,6 +674,9 @@ function App() {
         case 'kimi':
           service = new KimiService(apiKey);
           break;
+        case 'bigmodel':
+          service = new BigModelService(apiKey);
+          break;
         default:
           throw new Error('不支持的提供商');
       }
@@ -643,7 +700,12 @@ function App() {
                 ...prev[matrixKey],
                 isComplete: true,
                 tokenCount: chunk.tokens || 0,
-                cost: chunk.cost || 0
+                cost: chunk.cost || 0,
+                usage: chunk.usage || {
+                  prompt_tokens: 0,
+                  completion_tokens: chunk.tokens || 0,
+                  total_tokens: chunk.tokens || 0
+                }
               }
             }));
           } else {
@@ -675,7 +737,12 @@ function App() {
             isComplete: true,
             tokenCount: response.tokenCount || response.tokens || 0,
             cost: response.cost || 0,
-            timestamp: new Date()
+            timestamp: new Date(),
+            usage: response.usage || {
+              prompt_tokens: 0,
+              completion_tokens: response.tokenCount || response.tokens || 0,
+              total_tokens: response.tokenCount || response.tokens || 0
+            }
           }
         }));
 
@@ -685,11 +752,11 @@ function App() {
         if (response.cost) addCost(response.cost);
       }
 
-      await trackEvent('matrix_response_regenerated', {
-        modelId,
-        themeId,
-        versionId,
-        versionName: version.name,
+      await analytics.userAction('matrix_response_regenerated', {
+        model_id: modelId,
+        theme_id: themeId,
+        version_id: versionId,
+        version_name: version.name,
         provider: model.provider
       });
 
@@ -735,7 +802,7 @@ function App() {
     return (
       <>
         {/* 模型头部 - sticky */}
-        <div className="sticky top-0 z-10 px-4 py-3 border-b border-gray-200 bg-gray-50 dark:bg-gray-700 dark:border-gray-600 rounded-t-lg cursor-move transition-all duration-200"
+        <div className="sticky top-0 z-10 px-2 py-2 border-b border-gray-200 bg-gray-50 dark:bg-gray-700 dark:border-gray-600 rounded-t-lg cursor-move transition-all duration-200"
              style={{ backdropFilter: 'blur(8px)' }}>
                       <div className="flex items-center justify-between">
               <div className="flex items-center space-x-3">
@@ -761,7 +828,7 @@ function App() {
                 </div>
               </div>
               
-              {/* 生成状态指示器 */}
+              {/* 生成状态指示器和关闭按钮 */}
               <div className="flex items-center space-x-2">
                 {(() => {
                   // 获取最新消息的响应状态
@@ -790,6 +857,18 @@ function App() {
                     />
                   );
                 })()}
+                
+                {/* 关闭按钮 */}
+                <button
+                  className="w-5 h-5 flex items-center justify-center text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300 transition-colors duration-200 rounded hover:bg-gray-200 dark:hover:bg-gray-600"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    toggleModel(model.id);
+                  }}
+                  title="关闭模型"
+                >
+                  <X size={14} />
+                </button>
               </div>
             </div>
         </div>
@@ -809,7 +888,7 @@ function App() {
             const modelResponses = currentSession.responses[model.id] as Record<string, ModelResponse>;
             // 确保 messageResponse 存在且是 ModelResponse 类型
             const messageResponse = modelResponses?.[message.id] as ModelResponse;
-            console.log(`Rendering message [${model.name}, ${message.id}]:`, messageResponse?.content);
+            // 渲染消息响应
 
             return (
               <div key={message.id} className="mb-4" data-message-id={message.id}>
@@ -857,12 +936,17 @@ function App() {
                 {messageResponse && (
                   <div>
                     <div className="text-xs text-gray-500 mb-1">
-                      {model.name}
-                      {messageResponse.responseTime && (
-                        <span className="ml-2">
-                          ({messageResponse.responseTime}ms)
+                      <span className="flex items-center">
+                        <span>{model.name}</span>
+                        <span className="ml-2 text-gray-400">
+                          | {formatTokenAndCost(model.name, messageResponse.usage)}
                         </span>
-                      )}
+                        {messageResponse.responseTime && (
+                          <span className="ml-2">
+                            ({messageResponse.responseTime}ms)
+                          </span>
+                        )}
+                      </span>
                     </div>
                     
                     {/* 思考过程显示 */}
@@ -896,15 +980,15 @@ function App() {
                       </div>
                       {hoveredCopyId === `${model.id}_${message.id}` && !messageResponse.loading && !messageResponse.error && (
                         <button
-                          className="absolute top-2 right-2 text-xs sm:text-sm bg-white border rounded px-2 py-1 shadow hover:bg-gray-100 flex items-center"
-                          style={{ minWidth: '40px', minHeight: '28px' }}
+                          className="absolute top-2 right-2 text-xs sm:text-sm bg-white border rounded px-1 py-1 shadow hover:bg-gray-100 flex items-center"
+                          style={{ minWidth: '20px', minHeight: '20px' }}
                           onClick={async (event) => {
                             event.stopPropagation();
                             event.preventDefault();
                             const button = event.target as HTMLButtonElement;
                             await copyWithFeedback(messageResponse.content, button);
                           }}
-                          title="复制回复内容"
+                          title="复制内容"
                         >
                           <Copy size={14} />
                         </button>
@@ -923,14 +1007,14 @@ function App() {
   // 初始化模型顺序
   useEffect(() => {
     if (selectedModels.length > 0 && modelColumnOrder.length === 0) {
-      console.log('初始化模型顺序:', selectedModels);
+      // 初始化模型顺序
       setModelColumnOrder([...selectedModels]);
     }
   }, [selectedModels, modelColumnOrder]);
 
   // 模型列顺序管理 - 只在新增或移除模型时更新顺序
   useEffect(() => {
-    console.log('管理模型顺序 - 当前顺序:', modelColumnOrder, '选中模型:', selectedModels);
+    // 管理模型顺序
     
     // 如果modelColumnOrder为空，跳过处理
     if (modelColumnOrder.length === 0) return;
@@ -942,14 +1026,14 @@ function App() {
     const newModels = selectedModels.filter(model => !currentOrderSet.has(model));
     const removedModels = modelColumnOrder.filter(model => !selectedSet.has(model));
     
-    console.log('新增模型:', newModels, '移除模型:', removedModels);
+    // 检查模型变化
     
     if (newModels.length > 0 || removedModels.length > 0) {
       // 保留现有顺序，只添加新模型到末尾，移除已取消选择的模型
       const updatedOrder = modelColumnOrder
         .filter(model => selectedSet.has(model)) // 移除已取消选择的
         .concat(newModels); // 添加新选择的
-      console.log('更新后的模型顺序:', updatedOrder);
+      // 更新模型顺序
       setModelColumnOrder(updatedOrder);
     }
   }, [selectedModels, modelColumnOrder]);
@@ -1047,6 +1131,7 @@ function App() {
       images.push(base64);
     }
 
+    // 注意：这里只保存用户的原始输入到对话记录中，不包含搜索结果
     const messageId = addMessage(inputMessage.trim(), images);
     const newMessage: Message = {
       id: messageId,
@@ -1080,15 +1165,7 @@ function App() {
       total + (theme.versions.length * selectedModels.length), 0
     );
 
-    console.log('开始主题化矩阵测试:', {
-      themes: selectedThemes.map(t => ({ 
-        id: t.id, 
-        name: t.name, 
-        versions: t.versions.length 
-      })),
-      models: selectedModels,
-      totalCombinations
-    });
+    // 开始主题化矩阵测试
 
     // 为每个主题×版本×模型组合发送请求
     const requests = [];
@@ -1096,17 +1173,17 @@ function App() {
     for (const theme of selectedThemes) {
       for (const version of theme.versions) {
         for (const modelId of selectedModels) {
-          const model = AVAILABLE_MODELS.find(m => m.id === modelId);
+          const model = getAllModels().find(m => m.id === modelId);
           if (!model) continue;
 
           const matrixKey = getMatrixKey(theme.id, version.id, modelId);
           
-          console.log(`准备测试组合: ${theme.name}(${version.name}) × ${model.name}`);
+          // 准备测试组合
           
           requests.push((async () => {
             const apiKey = getApiKey(model.provider);
             if (!apiKey) {
-              console.log(`跳过 ${matrixKey}: 缺少API密钥`);
+              // 跳过：缺少API密钥
               setMatrixResponses(prev => ({
                 ...prev,
                 [matrixKey]: {
@@ -1121,7 +1198,8 @@ function App() {
             }
 
             try {
-              console.log(`开始处理 ${matrixKey}`);
+              // 开始处理组合
+              const startTime = Date.now();
               
               // 初始化响应状态
               const initialResponse = {
@@ -1130,7 +1208,8 @@ function App() {
                 isComplete: false,
                 timestamp: new Date(),
                 tokenCount: 0,
-                cost: 0
+                cost: 0,
+                startTime: startTime
               };
               
               setMatrixResponses(prev => ({
@@ -1158,6 +1237,9 @@ function App() {
                 case 'kimi':
                   service = new KimiService(apiKey);
                   break;
+                case 'bigmodel':
+                  service = new BigModelService(apiKey);
+                  break;
                 default:
                   throw new Error('不支持的提供商');
               }
@@ -1179,9 +1261,10 @@ function App() {
               // 使用对应的版本内容作为系统提示词
               const systemPromptContent = version.content;
 
-              console.log(`使用系统提示词 "${theme.name} - ${version.name}": ${systemPromptContent.slice(0, 50)}...`);
+              // 使用系统提示词
 
               // 尝试流式响应
+              let firstResponseTime: number | undefined;
               try {
                 await service.sendMessageStream({
                   model: model.modelId,
@@ -1192,7 +1275,8 @@ function App() {
                 }, (chunk) => {
                   if (chunk.finished) {
                     // 流式完成
-                    console.log(`${matrixKey} 流式完成，tokens: ${chunk.tokens}, cost: ${chunk.cost}`);
+                    const endTime = Date.now();
+                    const totalResponseTime = endTime - startTime;
                     setMatrixResponses(prev => {
                       const finalResponse = {
                         content: prev[matrixKey]?.content || '',
@@ -1200,7 +1284,16 @@ function App() {
                         isComplete: true,
                         timestamp: new Date(),
                         tokenCount: chunk.tokens || 0,
-                        cost: chunk.cost || 0
+                        cost: chunk.cost || 0,
+                        usage: {
+                          prompt_tokens: 0,
+                          completion_tokens: chunk.tokens || 0,
+                          total_tokens: chunk.tokens || 0
+                        },
+                        endTime: endTime,
+                        totalResponseTime: totalResponseTime,
+                        firstByteLatency: firstResponseTime ? firstResponseTime - startTime : undefined,
+                        responseTime: chunk.responseTime || totalResponseTime
                       };
                       
                       // 同时保存到会话响应中
@@ -1212,6 +1305,21 @@ function App() {
                       };
                     });
                   } else {
+                    // 记录首次响应时间
+                    if (!firstResponseTime && (chunk.content || chunk.reasoning_content)) {
+                      firstResponseTime = Date.now();
+                      setMatrixResponses(prev => ({
+                        ...prev,
+                        [matrixKey]: {
+                          ...prev[matrixKey],
+                          firstResponseTime: firstResponseTime
+                        }
+                      }));
+                      updateModelResponse(modelId, messageId, {
+                        firstResponseTime: firstResponseTime
+                      });
+                    }
+                    
                     // 追加流式内容
                     setMatrixResponses(prev => {
                       const currentResponse = prev[matrixKey] || {
@@ -1247,7 +1355,7 @@ function App() {
                 });
               } catch (streamError) {
                 // 流式失败，回退到非流式
-                console.log(`${matrixKey} 流式请求失败，回退到非流式:`, streamError);
+                // 流式请求失败，回退到非流式
                 const response = await service.sendMessage({
                   model: model.modelId,
                   messages,
@@ -1256,19 +1364,24 @@ function App() {
                   maxTokens: model.maxTokens || 4096,
                 });
 
-                console.log(`${matrixKey} 非流式完成:`, {
-                  contentLength: response.content.length,
-                  tokens: response.tokenCount || response.tokens,
-                  cost: response.cost
-                });
-
+                // 非流式完成
+                const endTime = Date.now();
+                const totalResponseTime = endTime - startTime;
                 const finalResponse = {
                   content: response.content,
                   reasoning_content: (response as any).reasoning_content || '',
                   isComplete: true,
                   timestamp: new Date(),
                   tokenCount: response.tokenCount || response.tokens || 0,
-                  cost: response.cost || 0
+                  cost: response.cost || 0,
+                  usage: response.usage || {
+                    prompt_tokens: 0,
+                    completion_tokens: response.tokenCount || response.tokens || 0,
+                    total_tokens: response.tokenCount || response.tokens || 0
+                  },
+                  endTime: endTime,
+                  totalResponseTime: totalResponseTime,
+                  responseTime: response.responseTime || totalResponseTime
                 };
 
                 setMatrixResponses(prev => ({
@@ -1287,21 +1400,21 @@ function App() {
               }
 
               // 记录分析事件
-              await trackEvent('theme_matrix_message_sent', {
-                themeId: theme.id,
-                themeName: theme.name,
-                versionId: version.id,
-                versionName: version.name,
-                modelId,
+              await analytics.userAction('theme_matrix_message_sent', {
+                theme_id: theme.id,
+                theme_name: theme.name,
+                version_id: version.id,
+                version_name: version.name,
+                model_id: modelId,
                 provider: model.provider,
-                messageLength: inputMessage.length,
-                hasImages: images.length > 0
+                message_length: inputMessage.length,
+                has_images: images.length > 0
               });
 
-              console.log(`${matrixKey} 处理完成`);
+              // 处理完成
 
             } catch (error: any) {
-              console.error(`${matrixKey} 处理失败:`, error);
+              // 处理失败
               const errorResponse = {
                 content: `错误: ${error.message}`,
                 reasoning_content: '',
@@ -1325,16 +1438,16 @@ function App() {
       }
     }
 
-    console.log(`总共创建 ${requests.length} 个请求任务`);
+    // 创建请求任务
 
     // 等待所有请求完成
     await Promise.all(requests);
     
-    console.log('所有主题化矩阵测试完成');
+    // 所有主题化矩阵测试完成
     setMatrixIsLoading(false);
   };
 
-  // 简单模式的消息发送函数
+  // 单提示词模式的消息发送函数
   const handleSendSimpleMessage = async () => {
     if (!inputMessage.trim() && selectedFiles.length === 0) return;
     if (selectedModels.length === 0) {
@@ -1342,7 +1455,53 @@ function App() {
       return;
     }
 
+    // 记录消息发送事件
+    await analytics.userAction('message_sent', {
+      message_length: inputMessage.length,
+      has_images: selectedFiles.length > 0,
+      image_count: selectedFiles.length,
+      selected_models: selectedModels,
+      model_count: selectedModels.length,
+      mode: 'simple'
+    });
+
     setCurrentLoading(true);
+    
+    // 网络搜索处理
+    let finalMessage = inputMessage.trim();
+    let searchContext = '';
+    
+    if (isWebSearchEnabled && shouldPerformWebSearch(inputMessage.trim())) {
+      try {
+        const bigmodelApiKey = getApiKey('bigmodel');
+        if (bigmodelApiKey) {
+          toast.info('正在进行网络搜索...');
+          
+          // 提取搜索关键词
+          const keywordResult = await extractSearchKeywords(inputMessage.trim(), bigmodelApiKey);
+          
+          // 执行网络搜索
+          const searchResponse = await performWebSearch(keywordResult.searchQuery, bigmodelApiKey, {
+            search_recency_filter: keywordResult.needsTimeContext ? 'oneDay' : 'noLimit'
+          });
+          
+          // 格式化搜索结果
+          searchContext = formatSearchResults(searchResponse);
+          
+          if (searchContext) {
+            // 将搜索结果作为上下文拼接到用户消息中（但不显示在对话框中）
+            finalMessage = inputMessage.trim() + searchContext;
+            toast.success('网络搜索完成，已获取相关信息');
+          } else {
+            toast.warning('网络搜索未找到相关结果');
+          }
+        }
+      } catch (error: any) {
+        console.error('网络搜索失败:', error);
+        toast.error(`网络搜索失败: ${error.message}`);
+        // 搜索失败时继续使用原始消息
+      }
+    }
     
     // 处理图片
     const imagePromises = selectedFiles.map(file => {
@@ -1363,10 +1522,11 @@ function App() {
     const messageId = addMessage(inputMessage.trim(), images);
     
     // 构建消息列表，包含刚刚添加的消息
+    // 注意：发送给AI的消息使用finalMessage（包含搜索结果），但显示的消息仍是原始输入
     const newMessage: Message = {
       id: messageId,
       role: 'user',
-      content: inputMessage.trim(),
+      content: finalMessage, // 这里使用包含搜索结果的完整消息
       timestamp: new Date(),
       images
     };
@@ -1381,7 +1541,7 @@ function App() {
 
     // 为每个选中的模型发送请求
     await Promise.all(selectedModels.map(async (modelId) => {
-      const model = AVAILABLE_MODELS.find(m => m.id === modelId);
+      const model = getAllModels().find(m => m.id === modelId);
       if (!model) return;
 
       const apiKey = getApiKey(model.provider);
@@ -1398,13 +1558,17 @@ function App() {
       }
 
       try {
+        // 记录开始时间
+        const startTime = Date.now();
+        
         // 添加初始响应
         addModelResponse(modelId, messageId, {
           content: '',
           isComplete: false,
           timestamp: new Date(),
           tokenCount: 0,
-          cost: 0
+          cost: 0,
+          startTime: startTime
         });
 
         let service;
@@ -1423,6 +1587,9 @@ function App() {
             break;
           case 'kimi':
             service = new KimiService(apiKey);
+            break;
+          case 'bigmodel':
+            service = new BigModelService(apiKey);
             break;
           default:
             throw new Error('不支持的提供商');
@@ -1443,6 +1610,7 @@ function App() {
         const modelParams = getModelParameters(modelId);
 
                  // 尝试流式响应
+         let firstResponseTime: number | undefined;
          try {
            await service.sendMessageStream({
             model: model.modelId,
@@ -1453,12 +1621,30 @@ function App() {
            }, (chunk) => {
              if (chunk.finished) {
                // 流式完成
+               const endTime = Date.now();
+               const totalResponseTime = endTime - startTime;
                updateModelResponse(modelId, messageId, { 
                  isComplete: true,
                  tokenCount: chunk.tokens || 0,
-                 cost: chunk.cost || 0
+                 cost: chunk.cost || 0,
+                 usage: chunk.usage || {
+                   prompt_tokens: 0,
+                   completion_tokens: chunk.tokens || 0,
+                   total_tokens: chunk.tokens || 0
+                 },
+                 endTime: endTime,
+                 totalResponseTime: totalResponseTime,
+                 firstByteLatency: firstResponseTime ? firstResponseTime - startTime : undefined,
+                 responseTime: chunk.responseTime || totalResponseTime
                });
              } else {
+               // 记录首次响应时间
+               if (!firstResponseTime && (chunk.content || chunk.reasoning_content)) {
+                 firstResponseTime = Date.now();
+                 updateModelResponse(modelId, messageId, {
+                   firstResponseTime: firstResponseTime
+                 });
+               }
                // 追加流式内容
                if (chunk.content) {
                  appendToModelResponse(modelId, messageId, chunk.content);
@@ -1480,11 +1666,17 @@ function App() {
             maxTokens: model.maxTokens || 4096,
            });
 
+           const endTime = Date.now();
+           const totalResponseTime = endTime - startTime;
            updateModelResponse(modelId, messageId, {
              content: response.content,
              isComplete: true,
              tokenCount: response.tokenCount || response.tokens || 0,
-             cost: response.cost || 0
+             cost: response.cost || 0,
+             usage: response.usage,
+             endTime: endTime,
+             totalResponseTime: totalResponseTime,
+             responseTime: response.responseTime || totalResponseTime
            });
 
            // 更新统计
@@ -1495,11 +1687,10 @@ function App() {
          }
 
         // 记录分析事件
-        await trackEvent('message_sent', {
-          modelId,
-          provider: model.provider,
-          messageLength: inputMessage.length,
-          hasImages: images.length > 0
+        await analytics.userAction('message_sent_simple', {
+          model_name: model.name,
+          message_length: inputMessage.length,
+          provider: model.provider
         });
 
       } catch (error: any) {
@@ -1726,7 +1917,7 @@ function App() {
             </div>
             
             <div className="flex items-center space-x-2">
-              {/* 简单模式下显示布局选择器 */}
+              {/* 单提示词模式下显示布局选择器 */}
               {pageMode === 'simple' && selectedModels.length > 0 && (
                 <LayoutSelector 
                   selectedMode={simpleLayoutMode}
@@ -1734,16 +1925,16 @@ function App() {
                 />
               )}
               
-              {/* 移除高级模式下的导航控制器 */}
+              {/* 移除多提示词模式下的导航控制器 */}
             </div>
           </div>
         </div>
 
         {/* 对话区域 - 占据剩余空间并可滚动 */}
-        <div className="flex-1 overflow-hidden min-h-0">
+        <div className="flex-1 overflow-hidden min-h-0" style={{ height: 'calc(100vh - 180px - 60px)' }}>
           {pageMode === 'advanced' ? (
-            // 高级模式：矩阵布局
-            <div className="h-full overflow-y-auto overflow-x-hidden p-3 w-full max-w-full">
+            // 多提示词模式：矩阵布局
+            <div className="h-full overflow-y-auto overflow-x-hidden pt-0 px-3 pb-3 w-full max-w-full">
               <ModelResponseMatrix 
                 currentResponses={matrixResponses}
                 isLoading={matrixIsLoading}
@@ -1752,7 +1943,7 @@ function App() {
               />
             </div>
           ) : (
-            // 简单模式：原有的模型对比布局
+            // 单提示词模式：原有的模型对比布局
             selectedModels.length > 0 ? (
             <div className="h-full overflow-y-auto overflow-x-hidden">
               <DndContext
@@ -1767,7 +1958,7 @@ function App() {
                       <div className="flex justify-center p-2 sm:p-4">
                         <div className="w-full max-w-2xl" style={{ width: 'min(150%, 800px)' }}>
                           {modelColumnOrder.filter(modelId => selectedModels.includes(modelId)).map((modelId) => {
-                      const model = AVAILABLE_MODELS.find(m => m.id === modelId);
+                      const model = getAllModels().find(m => m.id === modelId);
                       if (!model) return null;
                       return (
                         <SortableCard key={model.id} id={model.id}>
@@ -1781,7 +1972,7 @@ function App() {
                       // 使用用户选择的网格布局
                       <div className={`grid gap-3 p-2 sm:p-3 ${getGridClassName()}`}>
                         {modelColumnOrder.filter(modelId => selectedModels.includes(modelId)).map((modelId) => {
-                          const model = AVAILABLE_MODELS.find(m => m.id === modelId);
+                          const model = getAllModels().find(m => m.id === modelId);
                           if (!model) return null;
                           return (
                             <SortableCard key={model.id} id={model.id}>
@@ -1810,22 +2001,22 @@ function App() {
           )}
         </div>
 
+        {/* 底部对话面板 */}
+        <RightSidebar 
+          onSendMessage={handleSendMessage}
+          onNewSession={handleNewSession}
+          onRestartLastMessage={handleRestartLastMessage}
+          onFileUpload={handleFileUpload}
+          removeFile={removeFile}
+          currentSession={currentModeSession}
+          selectedModels={selectedModels}
+          isLoading={currentModeIsLoading}
+          pageMode={pageMode}
+          modelChatRefMap={modelChatRefMap}
+        />
+
       </div>
     </div>
-
-      {/* 右侧边栏 */}
-      <RightSidebar 
-        onSendMessage={handleSendMessage}
-        onNewSession={handleNewSession}
-        onRestartLastMessage={handleRestartLastMessage}
-        onFileUpload={handleFileUpload}
-        removeFile={removeFile}
-        currentSession={currentModeSession}
-        selectedModels={selectedModels}
-        isLoading={currentModeIsLoading}
-        pageMode={pageMode}
-        modelChatRefMap={modelChatRefMap}
-      />
 
       {/* 清空历史弹窗 */}
       {showClearConfirm && (
@@ -1854,6 +2045,9 @@ function App() {
           </div>
         </div>
       )}
+      
+      {/* Toast通知组件 */}
+      <Toaster position="top-right" richColors />
     </div>
   );
 }

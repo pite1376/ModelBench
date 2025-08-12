@@ -8,9 +8,11 @@ interface ChatInputProps {
   onFileSelect: (files: FileList | null) => void;
   selectedFiles: File[];
   onRemoveFile: (index: number) => void;
+  onGenerateReport?: () => void;
   isLoading: boolean;
   disabled: boolean;
   fileInputRef: React.RefObject<HTMLInputElement>;
+  hasMessages?: boolean;
 }
 
 export const ChatInput: React.FC<ChatInputProps> = ({
@@ -20,9 +22,11 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   onFileSelect,
   selectedFiles,
   onRemoveFile,
+  onGenerateReport,
   isLoading,
   disabled,
-  fileInputRef
+  fileInputRef,
+  hasMessages
 }) => {
   const handleKeyPress = (e: KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -128,4 +132,4 @@ export const ChatInput: React.FC<ChatInputProps> = ({
       </div>
     </div>
   );
-}; 
+};

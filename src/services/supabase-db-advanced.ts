@@ -34,8 +34,14 @@ export const getUserByAnonymousId = async (anonymous_id: string): Promise<User |
     // 如果是表不存在的错误，返回null而不是抛出异常
     if (error.message?.includes('relation "users" does not exist') || 
         error.message?.includes('406') ||
-        error.code === 'PGRST116') {
-      console.warn('⚠️  users表不存在，请先在Supabase中执行数据库架构SQL');
+        error.code === 'PGRST116' ||
+        error.message?.includes('Failed to fetch') ||
+        error.message?.includes('NetworkError')) {
+      console.warn('⚠️  数据库连接失败或users表不存在，请检查Supabase配置');
+      console.warn('💡 解决方案：');
+      console.warn('1. 检查 .env.local 文件中的 VITE_SUPABASE_URL 和 VITE_SUPABASE_ANON_KEY');
+      console.warn('2. 在Supabase控制台执行 fixed-supabase-schema.sql 脚本');
+      console.warn('3. 在浏览器控制台运行 testSupabaseConnection() 测试连接');
       return null;
     }
     throw new Error(`[Supabase][getUserByAnonymousId] ${error.message || error}`);
@@ -43,15 +49,59 @@ export const getUserByAnonymousId = async (anonymous_id: string): Promise<User |
 };
 
 export const createUser = async (user: Partial<User>): Promise<User> => {
-  const { data, error } = await supabase.from('users').insert([user]).select().single();
+  // 确保包含必要的时间戳字段
+  const userWithTimestamps = {
+    ...user,
+    created_at: user.created_at || new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+    last_active: user.last_active || new Date().toISOString()
+  };
+  const { data, error } = await supabase.from('users').insert([userWithTimestamps]).select().single();
   handleError(error, 'createUser');
   return data;
 };
 
 export const updateUser = async (id: string, updates: Partial<User>): Promise<User> => {
-  const { data, error } = await supabase.from('users').update(updates).eq('id', id).select().single();
-  handleError(error, 'updateUser');
-  return data;
+  try {
+    // 移除 updated_at 字段，因为它由数据库触发器自动更新
+    const { updated_at, ...cleanUpdates } = updates;
+    
+    // 确保至少有一个字段要更新
+    if (Object.keys(cleanUpdates).length === 0) {
+      throw new Error('No fields to update');
+    }
+    
+    const { data, error } = await supabase.from('users').update(cleanUpdates).eq('id', id).select().single();
+    
+    if (error) {
+      // 特殊处理触发器相关错误
+      if (error.message?.includes('updated_at') || error.message?.includes('trigger')) {
+        console.warn('⚠️  数据库触发器错误，尝试不使用触发器直接更新');
+        // 尝试手动添加 updated_at 字段
+        const manualUpdates = {
+          ...cleanUpdates,
+          updated_at: new Date().toISOString()
+        };
+        const { data: retryData, error: retryError } = await supabase
+          .from('users')
+          .update(manualUpdates)
+          .eq('id', id)
+          .select()
+          .single();
+        
+        if (retryError) {
+          throw retryError;
+        }
+        return retryData;
+      }
+      throw error;
+    }
+    
+    return data;
+  } catch (error: any) {
+    handleError(error, 'updateUser');
+    throw error; // 这行不会执行，因为 handleError 会抛出异常
+  }
 };
 
 export const deleteUser = async (id: string): Promise<boolean> => {
@@ -190,4 +240,4 @@ export const updateUserSubscription = async (user_id: string, updates: Partial<U
   const { data, error } = await supabase.from('user_subscriptions').update(updates).eq('user_id', user_id).select().single();
   handleError(error, 'updateUserSubscription');
   return data;
-}; 
+};

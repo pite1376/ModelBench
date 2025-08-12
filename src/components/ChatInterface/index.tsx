@@ -4,6 +4,9 @@ import { aiServiceManager } from '@/services/ai-service-manager';
 import { ChatInput } from './ChatInput';
 import { MessageList } from './MessageList';
 import { ModelResponseGrid } from './ModelResponseGrid';
+// import { ReportGenerationModal } from '@/components/ReportGeneration';
+// import { saveReport, exportReportAsHTML } from '@/services/reportStorageService';
+import { toast } from 'sonner';
 import { AVAILABLE_MODELS } from '@/lib/models';
 import { logger } from '@/utils/logger';
 import { usePerformanceMonitor, useDebounce } from '@/hooks/usePerformance';
@@ -23,13 +26,17 @@ export const ChatInterface: React.FC = () => {
     updateModelResponse,
     systemPrompt,
     addTokens,
-    addCost
+    addCost,
+    getAllModels
   } = useAppStore();
 
   const [inputMessage, setInputMessage] = useState('');
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const messageEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  
+  // 报告生成模态框状态
+  // const [isReportModalOpen, setIsReportModalOpen] = useState(false);
 
   // 性能监控
   usePerformanceMonitor('ChatInterface');
@@ -69,7 +76,7 @@ export const ChatInterface: React.FC = () => {
 
       // 为每个选中的模型发送请求
       const promises = selectedModels.map(async (modelId) => {
-        const model = AVAILABLE_MODELS.find(m => m.id === modelId);
+        const model = getAllModels().find(m => m.id === modelId);
         if (!model) return;
 
         const provider = model.provider as AIProvider;
@@ -190,6 +197,63 @@ export const ChatInterface: React.FC = () => {
     setSelectedFiles(prev => prev.filter((_, i) => i !== index));
   };
 
+  // 处理生成报告
+  // const handleGenerateReport = () => {
+  //   if (currentSession && currentSession.messages.length > 0) {
+  //     setIsReportModalOpen(true);
+  //   }
+  // };
+
+  // 处理报告保存
+  // const handleSaveReport = (report: any) => {
+  //   try {
+  //     const reportId = saveReport({
+  //       title: report.title || `AI模型对比报告 - ${new Date().toLocaleDateString()}`,
+  //       htmlContent: report.htmlContent,
+  //       sessionData: currentSession
+  //     });
+  //     
+  //     toast.success('报告保存成功！', {
+  //       description: `报告ID: ${reportId}`
+  //     });
+  //     
+  //     logger.info('Report saved successfully', { reportId, sessionId: currentSession?.id });
+  //   } catch (error) {
+  //     const errorMessage = error instanceof Error ? error.message : '保存失败';
+  //     toast.error('保存报告失败', {
+  //       description: errorMessage
+  //     });
+  //     
+  //     logger.error('Failed to save report', error);
+  //   }
+  // };
+
+  // 处理报告导出
+  // const handleExportReport = (report: any) => {
+  //   try {
+  //     // 创建临时报告ID用于导出
+  //     const tempReportId = saveReport({
+  //       title: report.title || `AI模型对比报告 - ${new Date().toLocaleDateString()}`,
+  //       htmlContent: report.htmlContent,
+  //       sessionData: currentSession
+  //     });
+  //     
+  //     // 导出HTML文件
+  //     exportReportAsHTML(tempReportId);
+  //     
+  //     toast.success('报告导出成功！');
+  //     
+  //     logger.info('Report exported successfully', { sessionId: currentSession?.id });
+  //   } catch (error) {
+  //     const errorMessage = error instanceof Error ? error.message : '导出失败';
+  //     toast.error('导出报告失败', {
+  //       description: errorMessage
+  //     });
+  //     
+  //     logger.error('Failed to export report', error);
+  //   }
+  // };
+
   const fileToBase64 = (file: File): Promise<string> => {
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
@@ -246,14 +310,25 @@ export const ChatInterface: React.FC = () => {
           onFileSelect={handleFileSelect}
           selectedFiles={selectedFiles}
           onRemoveFile={removeFile}
+          // onGenerateReport={handleGenerateReport}
           isLoading={isLoading}
           disabled={selectedModels.length === 0}
           fileInputRef={fileInputRef}
+          hasMessages={currentSession.messages.length > 0}
         />
 
         {/* 底部滚动锚点 */}
         <div ref={messageEndRef} />
+        
+        {/* 报告生成模态框 */}
+        {/* <ReportGenerationModal
+          isOpen={isReportModalOpen}
+          onClose={() => setIsReportModalOpen(false)}
+          conversationData={currentSession}
+          onSave={handleSaveReport}
+          onExport={handleExportReport}
+        /> */}
       </div>
     </ErrorBoundary>
   );
-}; 
+};

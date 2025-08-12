@@ -1,5 +1,6 @@
 import axios, { AxiosInstance } from 'axios';
 import { ChatRequest, ChatResponse, Message, AIProvider, StreamCallback } from '@/types';
+// Removed old web search import - using new webSearchService instead
 
 // AI服务基类
 export abstract class AIService {
@@ -62,15 +63,30 @@ export class DeepSeekService extends AIService {
         stream: false,
       };
 
-      console.log('DeepSeek API Request:', JSON.stringify(requestBody, null, 2));
-
       const response = await this.client.post('/v1/chat/completions', requestBody);
-
-      console.log('DeepSeek API Response:', response.data);
 
       const responseTime = Date.now() - startTime;
       const content = response.data.choices[0]?.message?.content || '';
-      const tokens = response.data.usage?.total_tokens || 0;
+      const usage = response.data.usage;
+      
+      // 如果usage为null或undefined，估算token数量
+      let tokens = 0;
+      let promptTokens = 0;
+      let completionTokens = 0;
+      
+      if (usage && usage.total_tokens) {
+        tokens = usage.total_tokens;
+        promptTokens = usage.prompt_tokens || 0;
+        completionTokens = usage.completion_tokens || 0;
+      } else {
+        // 估算token数量（基于字符数）
+        const inputText = request.messages.map(m => m.content).join('');
+        promptTokens = Math.ceil(inputText.length / 4); // 大约4个字符=1个token
+        completionTokens = Math.ceil(content.length / 4);
+        tokens = promptTokens + completionTokens;
+        console.warn('火山引擎API未返回usage数据，使用估算值');
+      }
+      
       const cost = this.calculateCost(tokens, request.model);
 
       return {
@@ -78,6 +94,11 @@ export class DeepSeekService extends AIService {
         tokens,
         cost,
         responseTime,
+        usage: {
+          prompt_tokens: promptTokens,
+          completion_tokens: completionTokens,
+          total_tokens: tokens
+        }
       };
     } catch (error: any) {
       console.error('DeepSeek API Error:', error);
@@ -91,18 +112,18 @@ export class DeepSeekService extends AIService {
 
   async sendMessageStream(request: ChatRequest, onChunk: StreamCallback): Promise<ChatResponse> {
     const startTime = Date.now();
-    console.log('🚀 DeepSeek 开始流式请求...');
+    let firstResponseTime: number | undefined;
     
     try {
+      let messages = this.formatMessages(request.messages, request.systemPrompt);
+      
       const requestBody = {
         model: request.model,
-        messages: this.formatMessages(request.messages, request.systemPrompt),
+        messages,
         temperature: request.temperature || 0.7,
         max_tokens: Math.min(request.maxTokens || 4096, 4096),
         stream: true,
       };
-
-      console.log('DeepSeek Stream API Request:', JSON.stringify(requestBody, null, 2));
 
       const response = await fetch(`${this.baseURL}/v1/chat/completions`, {
         method: 'POST',
@@ -119,8 +140,6 @@ export class DeepSeekService extends AIService {
         throw new Error(`HTTP ${response.status}: ${response.statusText}`);
       }
 
-      console.log('✅ DeepSeek 流式响应开始...');
-
       const reader = response.body?.getReader();
       if (!reader) {
         throw new Error('无法读取流响应');
@@ -130,11 +149,11 @@ export class DeepSeekService extends AIService {
       let tokens = 0;
       const decoder = new TextDecoder();
       let chunkCount = 0;
+      let isFirstChunk = true;
 
       while (true) {
         const { done, value } = await reader.read();
         if (done) {
-          console.log('🏁 DeepSeek 流式结束');
           break;
         }
 
@@ -145,8 +164,14 @@ export class DeepSeekService extends AIService {
           if (line.startsWith('data: ')) {
             const data = line.slice(6).trim();
             if (data === '[DONE]') {
-              console.log('✅ DeepSeek 流式完成信号');
-              onChunk({ content: '', finished: true, tokens });
+              const endTime = Date.now();
+              onChunk({ 
+                content: '', 
+                finished: true, 
+                tokens,
+                responseTime: endTime - startTime,
+                firstResponseTime: firstResponseTime ? firstResponseTime - startTime : undefined
+              });
               break;
             }
 
@@ -155,45 +180,57 @@ export class DeepSeekService extends AIService {
                 const parsed = JSON.parse(data);
                 const delta = parsed.choices?.[0]?.delta?.content || '';
                 
+                // 记录首次响应时间
+                if (isFirstChunk && (delta || parsed.choices?.[0]?.delta?.reasoning_content)) {
+                  firstResponseTime = Date.now();
+                  isFirstChunk = false;
+                }
+                
                 // 检查是否有reasoning_content字段（真实API返回）
                 if (parsed.choices?.[0]?.delta?.reasoning_content) {
                   const reasoningDelta = parsed.choices?.[0]?.delta?.reasoning_content;
-                  console.log(`🧠 DeepSeek Reasoning 块 ${chunkCount}:`, JSON.stringify(reasoningDelta));
                   onChunk({ content: '', reasoning_content: reasoningDelta, finished: false });
                 }
                 
                 if (delta) {
                   chunkCount++;
                   content += delta;
-                  console.log(`📝 DeepSeek 流式块 ${chunkCount}:`, JSON.stringify(delta));
                   
                   // 立即调用回调函数
                   onChunk({ content: delta, finished: false });
                 }
-                if (parsed.usage?.total_tokens) {
+                // 检查usage数据 - moonshot在choices[0]中返回usage
+                if (parsed.choices?.[0]?.usage?.total_tokens) {
+                  tokens = parsed.choices[0].usage.total_tokens;
+                } else if (parsed.usage?.total_tokens) {
                   tokens = parsed.usage.total_tokens;
                 }
               } catch (e) {
-                console.log('❌ DeepSeek Parse error for:', data);
+                // 忽略解析错误
               }
             }
           }
         }
       }
 
-      // 确保发送完成信号
-      onChunk({ content: '', finished: true, tokens });
-
-      const responseTime = Date.now() - startTime;
+      const endTime = Date.now();
+      const responseTime = endTime - startTime;
       const cost = this.calculateCost(tokens, request.model);
-
-      console.log(`🎉 DeepSeek 流式完成，总共 ${chunkCount} 块，耗时 ${responseTime}ms`);
-
+      
+      // 估算prompt_tokens（通常为total_tokens的20-30%）
+      const estimatedPromptTokens = Math.max(1, Math.round(tokens * 0.25));
+      const estimatedCompletionTokens = Math.max(1, tokens - estimatedPromptTokens);
+      
       return {
         content,
         tokens,
         cost,
         responseTime,
+        usage: {
+          prompt_tokens: estimatedPromptTokens,
+          completion_tokens: estimatedCompletionTokens,
+          total_tokens: tokens
+        }
       };
     } catch (error: any) {
       console.error('❌ DeepSeek Stream API Error:', error);
@@ -225,6 +262,25 @@ export class AliyunService extends AIService {
     // 兼容模式不需要 X-DashScope-SSE 头部
   }
 
+  // 估算token数量：中文随机1-1.8个token，英文随机1-1.5个token
+  private estimateTokens(text: string): number {
+    if (!text) return 0;
+    
+    let tokens = 0;
+    for (const char of text) {
+      // 检查是否为中文字符（包括中文标点）
+      if (/[\u4e00-\u9fff\u3400-\u4dbf\uf900-\ufaff\u3000-\u303f\uff00-\uffef]/.test(char)) {
+        // 中文字符随机1-1.8个token
+        tokens += 1 + Math.random() * 0.8;
+      } else {
+        // 英文字符随机1-1.5个token
+        tokens += 1 + Math.random() * 0.5;
+      }
+    }
+    
+    return Math.ceil(tokens);
+  }
+
   formatMessages(messages: Message[], systemPrompt?: string) {
     const formattedMessages = [];
     
@@ -254,24 +310,36 @@ export class AliyunService extends AIService {
         temperature: request.temperature || 0.85,
         max_tokens: Math.min(request.maxTokens || 2000, 2000),
         top_p: 0.8,
-        stream: false
+        stream: false,
+        include_usage: true  // 阿里云需要设置此参数才能返回usage信息
       };
-
-      console.log('Aliyun Compatible Mode API Request:', JSON.stringify(requestBody, null, 2));
 
       // 兼容模式端点
       const response = await this.client.post('/chat/completions', requestBody);
-
-      console.log('Aliyun Compatible Mode API Response:', JSON.stringify(response.data, null, 2));
 
       const responseTime = Date.now() - startTime;
       
       // OpenAI风格响应解析
       const content = response.data.choices?.[0]?.message?.content || '';
-      const usage = response.data.usage || {};
-      const tokens = usage.total_tokens || 
-                    (usage.prompt_tokens || 0) + (usage.completion_tokens || 0) || 
-                    0;
+      const usage = response.data.usage;
+      
+      // 如果usage为null或undefined，估算token数量
+      let tokens = 0;
+      let promptTokens = 0;
+      let completionTokens = 0;
+      
+      if (usage && usage.total_tokens) {
+        tokens = usage.total_tokens;
+        promptTokens = usage.prompt_tokens || 0;
+        completionTokens = usage.completion_tokens || 0;
+      } else {
+        // 估算token数量（中文随机1-1.8个token，英文随机1-1.5个token）
+        const inputText = request.messages.map(m => m.content).join('');
+        promptTokens = this.estimateTokens(inputText);
+        completionTokens = this.estimateTokens(content);
+        tokens = promptTokens + completionTokens;
+        console.warn('阿里云API未返回usage数据，使用估算值:', { promptTokens, completionTokens, tokens });
+      }
       
       const cost = this.calculateCost(tokens, request.model);
 
@@ -280,6 +348,11 @@ export class AliyunService extends AIService {
         tokens,
         cost,
         responseTime,
+        usage: {
+          prompt_tokens: promptTokens,
+          completion_tokens: completionTokens,
+          total_tokens: tokens
+        }
       };
     } catch (error: any) {
       console.error('Aliyun Compatible Mode API Error:', error);
@@ -308,7 +381,7 @@ export class AliyunService extends AIService {
 
   async sendMessageStream(request: ChatRequest, onChunk: StreamCallback): Promise<ChatResponse> {
     const startTime = Date.now();
-    console.log('☁️ 阿里云 开始流式请求...');
+    let firstResponseTime: number | undefined;
     
     try {
       // 阿里云兼容模式支持真正的流式输出
@@ -318,10 +391,9 @@ export class AliyunService extends AIService {
         temperature: request.temperature || 0.85,
         max_tokens: Math.min(request.maxTokens || 2000, 2000),
         top_p: 0.8,
-        stream: true
+        stream: true,
+        include_usage: true  // 阿里云需要设置此参数才能在最后一个chunk返回usage信息
       };
-
-      console.log('Aliyun Stream API Request:', JSON.stringify(requestBody, null, 2));
 
       const response = await fetch(`${this.baseURL}/chat/completions`, {
         method: 'POST',
@@ -346,6 +418,8 @@ export class AliyunService extends AIService {
 
       let content = '';
       let tokens = 0;
+      let promptTokens = 0;
+      let completionTokens = 0;
       const decoder = new TextDecoder();
 
       while (true) {
@@ -366,24 +440,53 @@ export class AliyunService extends AIService {
             if (data) {
               try {
                 const parsed = JSON.parse(data);
+                console.log('阿里云流式响应chunk:', parsed);
+                
+                // 记录首次响应时间
+                if (!firstResponseTime && (parsed.choices?.[0]?.delta?.content || parsed.choices?.[0]?.delta?.reasoning_content)) {
+                  firstResponseTime = Date.now();
+                }
+                
                 // 检查是否有reasoning_content字段（真实API返回）
                 if (parsed.choices?.[0]?.delta?.reasoning_content) {
                   const reasoningDelta = parsed.choices?.[0]?.delta?.reasoning_content;
                   onChunk({ content: '', reasoning_content: reasoningDelta, finished: false });
                 }
                 
-                // 根据阿里云API返回格式解析
-                const delta = parsed.choices?.[0]?.delta?.content || '';
-                if (delta) {
-                  content += delta;
-                  onChunk({ content: delta, finished: false });
-                }
-                if (parsed.usage?.total_tokens) {
+                // 根据阿里云官方文档，检查是否为最后一个包含usage的chunk
+                // 最后一个chunk的choices数组为空或不存在，但包含usage信息
+                if (parsed.usage && parsed.usage.total_tokens) {
                   tokens = parsed.usage.total_tokens;
+                  promptTokens = parsed.usage.prompt_tokens || 0;
+                  completionTokens = parsed.usage.completion_tokens || 0;
+                  console.log('✅ 阿里云获取到usage数据:', { tokens, promptTokens, completionTokens });
+                  console.log('✅ 阿里云最后一个chunk，choices长度:', parsed.choices?.length || 0);
+                  
+                  const endTime = Date.now();
+                  const responseTime = endTime - startTime;
+                  // 重要：通过onChunk传递usage信息到前端
+                  onChunk({ 
+                    content: '', 
+                    finished: true, 
+                    tokens,
+                    usage: {
+                      prompt_tokens: promptTokens,
+                      completion_tokens: completionTokens,
+                      total_tokens: tokens
+                    },
+                    responseTime: responseTime,
+                    firstResponseTime: firstResponseTime
+                  });
+                } else {
+                  // 处理普通的内容chunk
+                  const delta = parsed.choices?.[0]?.delta?.content || '';
+                  if (delta) {
+                    content += delta;
+                    onChunk({ content: delta, finished: false });
+                  }
                 }
               } catch (e) {
-                // 忽略解析错误
-                console.log('Aliyun Parse error for:', data);
+                console.warn('解析阿里云流式响应失败:', e);
               }
             }
           }
@@ -393,11 +496,43 @@ export class AliyunService extends AIService {
       const responseTime = Date.now() - startTime;
       const cost = this.calculateCost(tokens, request.model);
 
+      // 如果没有获取到tokens，估算token数量
+      let finalTokens = tokens;
+      
+      if (finalTokens <= 0) {
+        // 基于内容估算（中文随机1-1.8个token，英文随机1-1.5个token）
+        const inputText = request.messages.map(m => m.content).join('');
+        promptTokens = this.estimateTokens(inputText);
+        completionTokens = this.estimateTokens(content);
+        finalTokens = promptTokens + completionTokens;
+        console.warn('阿里云流式API未返回usage数据，使用估算值:', { promptTokens, completionTokens, finalTokens });
+        
+        // 重要：通过onChunk传递估算的usage信息到前端
+        onChunk({ 
+          content: '', 
+          finished: true, 
+          tokens: finalTokens,
+          usage: {
+            prompt_tokens: promptTokens,
+            completion_tokens: completionTokens,
+            total_tokens: finalTokens
+          }
+        });
+      } else {
+        // 使用真实的usage数据
+        console.log('阿里云使用真实usage数据:', { promptTokens, completionTokens, finalTokens });
+      }
+      
       return {
         content,
-        tokens,
+        tokens: finalTokens,
         cost,
         responseTime,
+        usage: {
+          prompt_tokens: promptTokens,
+          completion_tokens: completionTokens,
+          total_tokens: finalTokens
+        }
       };
     } catch (error: any) {
       console.error('Aliyun Stream API Error:', error);
@@ -473,7 +608,26 @@ export class VolcengineService extends AIService {
 
       const responseTime = Date.now() - startTime;
       const content = response.data.choices[0]?.message?.content || '';
-      const tokens = response.data.usage?.total_tokens || 0;
+      const usage = response.data.usage;
+      
+      // 如果usage为null或undefined，估算token数量
+      let tokens = 0;
+      let promptTokens = 0;
+      let completionTokens = 0;
+      
+      if (usage && usage.total_tokens) {
+        tokens = usage.total_tokens;
+        promptTokens = usage.prompt_tokens || 0;
+        completionTokens = usage.completion_tokens || 0;
+      } else {
+        // 估算token数量（基于字符数）
+        const inputText = request.messages.map(m => m.content).join('');
+        promptTokens = Math.ceil(inputText.length / 4); // 大约4个字符=1个token
+        completionTokens = Math.ceil(content.length / 4);
+        tokens = promptTokens + completionTokens;
+        console.warn('Moonshot API未返回usage数据，使用估算值');
+      }
+      
       const cost = this.calculateCost(tokens, request.model);
 
       return {
@@ -481,6 +635,11 @@ export class VolcengineService extends AIService {
         tokens,
         cost,
         responseTime,
+        usage: {
+          prompt_tokens: promptTokens,
+          completion_tokens: completionTokens,
+          total_tokens: tokens
+        }
       };
     } catch (error: any) {
       console.error('Volcengine API Error:', error);
@@ -494,6 +653,7 @@ export class VolcengineService extends AIService {
 
   async sendMessageStream(request: ChatRequest, onChunk: StreamCallback): Promise<ChatResponse> {
     const startTime = Date.now();
+    let firstResponseTime: number | undefined;
     
     try {
       // 火山引擎支持真正的流式输出
@@ -505,7 +665,7 @@ export class VolcengineService extends AIService {
         stream: true,
       };
 
-      console.log('Volcengine Stream API Request:', JSON.stringify(requestBody, null, 2));
+      // Volcengine Stream API Request
 
       const response = await fetch(`${this.baseURL}/chat/completions`, {
         method: 'POST',
@@ -542,13 +702,27 @@ export class VolcengineService extends AIService {
           if (line.startsWith('data: ')) {
             const data = line.slice(6).trim();
             if (data === '[DONE]') {
-              onChunk({ content: '', finished: true, tokens });
+              const endTime = Date.now();
+              const responseTime = endTime - startTime;
+              onChunk({ 
+                content: '', 
+                finished: true, 
+                tokens,
+                responseTime: responseTime,
+                firstResponseTime: firstResponseTime
+              });
               break;
             }
 
             if (data) {
               try {
                 const parsed = JSON.parse(data);
+                
+                // 记录首次响应时间
+                if (!firstResponseTime && (parsed.choices?.[0]?.delta?.content || parsed.choices?.[0]?.delta?.reasoning_content)) {
+                  firstResponseTime = Date.now();
+                }
+                
                 // 检查是否有reasoning_content字段（真实API返回）
                 if (parsed.choices?.[0]?.delta?.reasoning_content) {
                   const reasoningDelta = parsed.choices?.[0]?.delta?.reasoning_content;
@@ -560,12 +734,14 @@ export class VolcengineService extends AIService {
                   content += delta;
                   onChunk({ content: delta, finished: false });
                 }
-                if (parsed.usage?.total_tokens) {
+                // 检查usage数据 - moonshot在choices[0]中返回usage
+                if (parsed.choices?.[0]?.usage?.total_tokens) {
+                  tokens = parsed.choices[0].usage.total_tokens;
+                } else if (parsed.usage?.total_tokens) {
                   tokens = parsed.usage.total_tokens;
                 }
               } catch (e) {
                 // 忽略解析错误
-                console.log('Volcengine Parse error for:', data);
               }
             }
           }
@@ -575,11 +751,34 @@ export class VolcengineService extends AIService {
       const responseTime = Date.now() - startTime;
       const cost = this.calculateCost(tokens, request.model);
 
+      // 如果没有获取到tokens，估算token数量
+      let finalTokens = tokens;
+      let promptTokens = 0;
+      let completionTokens = 0;
+      
+      if (finalTokens > 0) {
+        // 估算prompt_tokens（通常为total_tokens的20-30%）
+        promptTokens = Math.max(1, Math.round(finalTokens * 0.25));
+        completionTokens = Math.max(1, finalTokens - promptTokens);
+      } else {
+        // 基于内容估算
+        const inputText = request.messages.map(m => m.content).join('');
+        promptTokens = Math.ceil(inputText.length / 4);
+        completionTokens = Math.ceil(content.length / 4);
+        finalTokens = promptTokens + completionTokens;
+        console.warn('火山引擎流式API未返回usage数据，使用估算值');
+      }
+
       return {
         content,
-        tokens,
+        tokens: finalTokens,
         cost,
         responseTime,
+        usage: {
+          prompt_tokens: promptTokens,
+          completion_tokens: completionTokens,
+          total_tokens: finalTokens
+        }
       };
     } catch (error: any) {
       console.error('Volcengine Stream API Error:', error);
@@ -637,15 +836,30 @@ export class KimiService extends AIService {
         stream: false,
       };
 
-      console.log('Kimi API Request:', JSON.stringify(requestBody, null, 2));
-
       const response = await this.client.post('/chat/completions', requestBody);
-
-      console.log('Kimi API Response:', response.data);
 
       const responseTime = Date.now() - startTime;
       const content = response.data.choices[0]?.message?.content || '';
-      const tokens = response.data.usage?.total_tokens || 0;
+      const usage = response.data.usage;
+      
+      // 如果usage为null或undefined，估算token数量
+      let tokens = 0;
+      let promptTokens = 0;
+      let completionTokens = 0;
+      
+      if (usage && usage.total_tokens) {
+        tokens = usage.total_tokens;
+        promptTokens = usage.prompt_tokens || 0;
+        completionTokens = usage.completion_tokens || 0;
+      } else {
+        // 估算token数量（基于字符数）
+        const inputText = request.messages.map(m => m.content).join('');
+        promptTokens = Math.ceil(inputText.length / 4); // 大约4个字符=1个token
+        completionTokens = Math.ceil(content.length / 4);
+        tokens = promptTokens + completionTokens;
+        console.warn('DeepSeek API未返回usage数据，使用估算值');
+      }
+      
       const cost = this.calculateCost(tokens, request.model);
 
       return {
@@ -653,6 +867,11 @@ export class KimiService extends AIService {
         tokens,
         cost,
         responseTime,
+        usage: {
+          prompt_tokens: promptTokens,
+          completion_tokens: completionTokens,
+          total_tokens: tokens
+        }
       };
     } catch (error: any) {
       console.error('Kimi API Error:', error);
@@ -666,7 +885,7 @@ export class KimiService extends AIService {
 
   async sendMessageStream(request: ChatRequest, onChunk: StreamCallback): Promise<ChatResponse> {
     const startTime = Date.now();
-    console.log('🚀 Kimi 开始流式请求...');
+    let firstResponseTime: number | undefined;
     
     try {
       const requestBody = {
@@ -676,8 +895,6 @@ export class KimiService extends AIService {
         max_tokens: Math.min(request.maxTokens || 2048, 128000),
         stream: true,
       };
-
-      console.log('Kimi Stream API Request:', JSON.stringify(requestBody, null, 2));
 
       const response = await fetch(`${this.baseURL}/chat/completions`, {
         method: 'POST',
@@ -694,7 +911,7 @@ export class KimiService extends AIService {
         throw new Error(`HTTP ${response.status}: ${response.statusText}`);
       }
 
-      console.log('✅ Kimi 流式响应开始...');
+
 
       const reader = response.body?.getReader();
       if (!reader) {
@@ -709,7 +926,6 @@ export class KimiService extends AIService {
       while (true) {
         const { done, value } = await reader.read();
         if (done) {
-          console.log('🏁 Kimi 流式结束');
           break;
         }
 
@@ -721,7 +937,15 @@ export class KimiService extends AIService {
             const data = line.slice(6).trim();
             if (data === '[DONE]') {
               console.log('✅ Kimi 流式完成信号');
-              onChunk({ content: '', finished: true, tokens });
+              const endTime = Date.now();
+              const responseTime = endTime - startTime;
+              onChunk({ 
+                content: '', 
+                finished: true, 
+                tokens,
+                responseTime: responseTime,
+                firstResponseTime: firstResponseTime
+              });
               break;
             }
 
@@ -729,6 +953,12 @@ export class KimiService extends AIService {
               try {
                 const parsed = JSON.parse(data);
                 const delta = parsed.choices?.[0]?.delta?.content || '';
+                
+                // 记录首次响应时间
+                if (!firstResponseTime && (delta || parsed.choices?.[0]?.delta?.reasoning_content)) {
+                  firstResponseTime = Date.now();
+                }
+                
                 // 检查是否有reasoning_content字段（真实API返回）
                 if (parsed.choices?.[0]?.delta?.reasoning_content) {
                   const reasoningDelta = parsed.choices?.[0]?.delta?.reasoning_content;
@@ -738,16 +968,26 @@ export class KimiService extends AIService {
                 if (delta) {
                   chunkCount++;
                   content += delta;
-                  console.log(`📝 Kimi 流式块 ${chunkCount}:`, JSON.stringify(delta));
                   
                   // 立即调用回调函数
                   onChunk({ content: delta, finished: false });
                 }
-                if (parsed.usage?.total_tokens) {
+                
+                // 检查usage数据 - moonshot在choices[0]中返回usage，通常在finish_reason为stop时
+                if (parsed.choices?.[0]?.usage?.total_tokens) {
+                  tokens = parsed.choices[0].usage.total_tokens;
+                  console.log('✅ Moonshot usage数据获取成功:', parsed.choices[0].usage);
+                } else if (parsed.usage?.total_tokens) {
                   tokens = parsed.usage.total_tokens;
+                  console.log('✅ Moonshot usage数据获取成功:', parsed.usage);
+                }
+                
+                // 检查是否为完成状态
+                if (parsed.choices?.[0]?.finish_reason === 'stop' && tokens > 0) {
+                  console.log('✅ Moonshot 流式完成，tokens:', tokens);
                 }
               } catch (e) {
-                console.log('❌ Kimi Parse error for:', data);
+                // 忽略解析错误
               }
             }
           }
@@ -760,13 +1000,34 @@ export class KimiService extends AIService {
       const responseTime = Date.now() - startTime;
       const cost = this.calculateCost(tokens, request.model);
 
-      console.log(`🎉 Kimi 流式完成，总共 ${chunkCount} 块，耗时 ${responseTime}ms`);
+      // 如果没有获取到tokens，估算token数量
+      let finalTokens = tokens;
+      let promptTokens = 0;
+      let completionTokens = 0;
+      
+      if (finalTokens > 0) {
+        // 估算prompt_tokens（通常为total_tokens的20-30%）
+        promptTokens = Math.max(1, Math.round(finalTokens * 0.25));
+        completionTokens = Math.max(1, finalTokens - promptTokens);
+      } else {
+        // 基于内容估算
+        const inputText = request.messages.map(m => m.content).join('');
+        promptTokens = Math.ceil(inputText.length / 4);
+        completionTokens = Math.ceil(content.length / 4);
+        finalTokens = promptTokens + completionTokens;
+        console.warn('Moonshot流式API未返回usage数据，使用估算值');
+      }
 
       return {
         content,
-        tokens,
+        tokens: finalTokens,
         cost,
         responseTime,
+        usage: {
+          prompt_tokens: promptTokens,
+          completion_tokens: completionTokens,
+          total_tokens: finalTokens
+        }
       };
     } catch (error: any) {
       console.error('❌ Kimi Stream API Error:', error);
@@ -852,15 +1113,12 @@ export class ClaudeService extends AIService {
         stream: false,
       };
 
-      console.log('Claude API Request:', JSON.stringify(requestBody, null, 2));
-
       const response = await this.client.post('/chat/completions', requestBody);
-
-      console.log('Claude API Response:', response.data);
 
       const responseTime = Date.now() - startTime;
       const content = response.data.choices?.[0]?.message?.content || '';
-      const tokens = response.data.usage?.total_tokens || 0;
+      const usage = response.data.usage || {};
+      const tokens = usage.total_tokens || 0;
       const cost = this.calculateCost(tokens, request.model);
 
       return {
@@ -868,6 +1126,11 @@ export class ClaudeService extends AIService {
         tokens,
         cost,
         responseTime,
+        usage: {
+          prompt_tokens: usage.prompt_tokens || 0,
+          completion_tokens: usage.completion_tokens || 0,
+          total_tokens: usage.total_tokens || 0
+        }
       };
     } catch (error: any) {
       console.error('Claude API Error:', error);
@@ -881,7 +1144,7 @@ export class ClaudeService extends AIService {
 
   async sendMessageStream(request: ChatRequest, onChunk: StreamCallback): Promise<ChatResponse> {
     const startTime = Date.now();
-    console.log('🚀 Claude 开始流式请求...');
+    let firstResponseTime: number | undefined;
 
     try {
       const requestBody = {
@@ -891,8 +1154,6 @@ export class ClaudeService extends AIService {
         max_tokens: Math.min(request.maxTokens || 4096, 4096),
         stream: true,
       };
-
-      console.log('Claude Stream API Request:', JSON.stringify(requestBody, null, 2));
 
       const response = await fetch(`${this.baseURL}/chat/completions`, {
         method: 'POST',
@@ -909,7 +1170,7 @@ export class ClaudeService extends AIService {
         throw new Error(`HTTP ${response.status}: ${response.statusText}`);
       }
 
-      console.log('✅ Claude 流式响应开始...');
+
 
       const reader = response.body?.getReader();
       if (!reader) {
@@ -924,7 +1185,6 @@ export class ClaudeService extends AIService {
       while (true) {
         const { done, value } = await reader.read();
         if (done) {
-          console.log('🏁 Claude 流式结束');
           break;
         }
 
@@ -935,8 +1195,15 @@ export class ClaudeService extends AIService {
           if (line.startsWith('data: ')) {
             const data = line.slice(6).trim();
             if (data === '[DONE]') {
-              console.log('✅ Claude 流式完成信号');
-              onChunk({ content: '', finished: true, tokens });
+              const endTime = Date.now();
+              const responseTime = endTime - startTime;
+              onChunk({ 
+                content: '', 
+                finished: true, 
+                tokens,
+                responseTime: responseTime,
+                firstResponseTime: firstResponseTime
+              });
               break;
             }
 
@@ -944,6 +1211,12 @@ export class ClaudeService extends AIService {
               try {
                 const parsed = JSON.parse(data);
                 const delta = parsed.choices?.[0]?.delta?.content || '';
+                
+                // 记录首次响应时间
+                if (!firstResponseTime && (delta || parsed.choices?.[0]?.delta?.reasoning_content)) {
+                  firstResponseTime = Date.now();
+                }
+                
                 // 检查是否有reasoning_content字段（真实API返回）
                 if (parsed.choices?.[0]?.delta?.reasoning_content) {
                   const reasoningDelta = parsed.choices?.[0]?.delta?.reasoning_content;
@@ -953,7 +1226,6 @@ export class ClaudeService extends AIService {
                 if (delta) {
                   chunkCount++;
                   content += delta;
-                  console.log(`📝 Claude 流式块 ${chunkCount}:`, JSON.stringify(delta));
                   
                   onChunk({ content: delta, finished: false });
                 }
@@ -961,7 +1233,7 @@ export class ClaudeService extends AIService {
                   tokens = parsed.usage.total_tokens;
                 }
               } catch (e) {
-                console.log('❌ Claude Parse error for:', data);
+                // 忽略解析错误
               }
             }
           }
@@ -973,13 +1245,20 @@ export class ClaudeService extends AIService {
       const responseTime = Date.now() - startTime;
       const cost = this.calculateCost(tokens, request.model);
 
-      console.log(`🎉 Claude 流式完成，总共 ${chunkCount} 块，耗时 ${responseTime}ms`);
+      // 估算prompt_tokens（通常为total_tokens的20-30%）
+      const estimatedPromptTokens = Math.max(1, Math.round(tokens * 0.25));
+      const estimatedCompletionTokens = Math.max(1, tokens - estimatedPromptTokens);
 
       return {
         content,
         tokens,
         cost,
         responseTime,
+        usage: {
+          prompt_tokens: estimatedPromptTokens,
+          completion_tokens: estimatedCompletionTokens,
+          total_tokens: tokens
+        }
       };
     } catch (error: any) {
       console.error('❌ Claude Stream API Error:', error);
@@ -1003,6 +1282,213 @@ export class ClaudeService extends AIService {
   }
 }
 
+// 智谱AI服务
+export class BigModelService extends AIService {
+  constructor(apiKey: string) {
+    super(apiKey, 'https://open.bigmodel.cn/api/paas/v4');
+    this.client.defaults.headers['Authorization'] = `Bearer ${apiKey}`;
+  }
+
+  formatMessages(messages: Message[], systemPrompt?: string) {
+    const formattedMessages = [];
+    
+    if (systemPrompt) {
+      formattedMessages.push({
+        role: 'system',
+        content: systemPrompt,
+      });
+    }
+
+    return formattedMessages.concat(
+      messages.map(msg => ({
+        role: msg.role,
+        content: msg.content,
+      }))
+    );
+  }
+
+  async sendMessage(request: ChatRequest): Promise<ChatResponse> {
+    const startTime = Date.now();
+    
+    try {
+      let messages = this.formatMessages(request.messages, request.systemPrompt);
+      
+      // Web search functionality moved to new webSearchService
+      
+      const requestBody = {
+        model: request.model,
+        messages,
+        temperature: request.temperature || 0.7,
+        max_tokens: Math.min(request.maxTokens || 4096, 4096),
+        stream: false,
+      };
+
+      const response = await this.client.post('/chat/completions', requestBody);
+
+      const responseTime = Date.now() - startTime;
+      let content = response.data.choices[0]?.message?.content || '';
+      const usage = response.data.usage || {};
+      const tokens = usage.total_tokens || 0;
+      const cost = this.calculateCost(tokens, request.model);
+      
+      return {
+        content,
+        tokens,
+        cost,
+        responseTime,
+        usage: {
+          prompt_tokens: usage.prompt_tokens || 0,
+          completion_tokens: usage.completion_tokens || 0,
+          total_tokens: usage.total_tokens || 0
+        }
+      };
+    } catch (error: any) {
+      console.error('BigModel API Error:', error);
+      const errorMessage = error.response?.data?.error?.message || 
+                          error.response?.data?.message ||
+                          error.message || 
+                          '请求失败';
+      throw new Error(`智谱AI API错误: ${errorMessage}`);
+    }
+  }
+
+  async sendMessageStream(request: ChatRequest, onChunk: StreamCallback): Promise<ChatResponse> {
+    const startTime = Date.now();
+    let firstResponseTime: number | undefined;
+    
+    try {
+      const requestBody = {
+        model: request.model,
+        messages: this.formatMessages(request.messages, request.systemPrompt),
+        temperature: request.temperature || 0.7,
+        max_tokens: Math.min(request.maxTokens || 4096, 4096),
+        stream: true,
+      };
+
+      const response = await fetch(`${this.baseURL}/chat/completions`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${this.apiKey}`,
+        },
+        body: JSON.stringify(requestBody),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('BigModel Stream Error Response:', errorText);
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+
+
+
+      const reader = response.body?.getReader();
+      if (!reader) {
+        throw new Error('无法读取流响应');
+      }
+
+      let content = '';
+      let tokens = 0;
+      const decoder = new TextDecoder();
+      let chunkCount = 0;
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) {
+          break;
+        }
+
+        const chunk = decoder.decode(value);
+        const lines = chunk.split('\n');
+
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            const data = line.slice(6).trim();
+            if (data === '[DONE]') {
+              const endTime = Date.now();
+              const responseTime = endTime - startTime;
+              onChunk({ 
+                content: '', 
+                finished: true, 
+                tokens,
+                responseTime: responseTime,
+                firstResponseTime: firstResponseTime
+              });
+              break;
+            }
+
+            if (data) {
+              try {
+                const parsed = JSON.parse(data);
+                const delta = parsed.choices?.[0]?.delta?.content || '';
+                
+                // 记录首次响应时间
+                if (!firstResponseTime && (delta || parsed.choices?.[0]?.delta?.reasoning_content)) {
+                  firstResponseTime = Date.now();
+                }
+                
+                // 检查是否有reasoning_content字段
+                if (parsed.choices?.[0]?.delta?.reasoning_content) {
+                  const reasoningDelta = parsed.choices?.[0]?.delta?.reasoning_content;
+                  onChunk({ content: '', reasoning_content: reasoningDelta, finished: false });
+                }
+                
+                if (delta) {
+                  chunkCount++;
+                  content += delta;
+                  
+                  onChunk({ content: delta, finished: false });
+                }
+                if (parsed.usage?.total_tokens) {
+                  tokens = parsed.usage.total_tokens;
+                }
+              } catch (e) {
+                // 忽略解析错误
+              }
+            }
+          }
+        }
+      }
+
+      // 确保发送完成信号
+      onChunk({ content: '', finished: true, tokens });
+
+      const responseTime = Date.now() - startTime;
+      const cost = this.calculateCost(tokens, request.model);
+
+      return {
+        content,
+        tokens,
+        cost,
+        responseTime,
+        usage: {
+          prompt_tokens: 0, // 流式响应中通常不提供详细的token分解
+          completion_tokens: tokens,
+          total_tokens: tokens
+        }
+      };
+    } catch (error: any) {
+      console.error('❌ BigModel Stream API Error:', error);
+      const errorMessage = error.message || '流式请求失败';
+      throw new Error(`智谱AI流式API错误: ${errorMessage}`);
+    }
+  }
+
+  calculateCost(tokens: number, model: string): number {
+    // 智谱AI定价（示例价格，请根据实际定价调整）
+    const costPerToken = {
+      'glm-4.5': 0.00001,
+      'glm-4.5-x': 0.000015,
+      'glm-4.5-v': 0.000015,
+      'glm-4.5-air': 0.000005,
+      'glm-4.5-airx': 0.000008,
+      'glm-4.5-flash': 0, // 免费版本
+    };
+    
+    return tokens * (costPerToken[model as keyof typeof costPerToken] || 0.00001);
+  }
+}
+
 // 服务工厂
 export class AIServiceFactory {
   static createService(provider: AIProvider | string, apiKey: string): AIService {
@@ -1019,6 +1505,8 @@ export class AIServiceFactory {
         return new KimiService(apiKey);
       case 'claude':
         return new ClaudeService(apiKey);
+      case 'bigmodel':
+        return new BigModelService(apiKey);
       default:
         throw new Error(`Unsupported AI provider: ${provider}`);
     }
@@ -1077,4 +1565,4 @@ export class ChatService {
 }
 
 // 全局聊天服务实例
-export const chatService = new ChatService(); 
+export const chatService = new ChatService();

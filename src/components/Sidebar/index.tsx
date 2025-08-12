@@ -369,11 +369,11 @@ export const Sidebar: React.FC = () => {
       </div>
 
       {/* 底部个人区域 */}
-      <div className="p-3 border-t border-gray-200 dark:border-gray-700 flex-shrink-0">
+      <div className="p-1 border-t border-gray-200 dark:border-gray-700 flex-shrink-0">
         {isExpanded ? (
                       <button
               onClick={openPersonalModal}
-              className="w-full flex items-center space-x-3 p-2 hover:bg-gray-50 dark:hover:bg-gray-700 rounded-lg transition-colors"
+              className="w-full flex items-center space-x-3 p-1 hover:bg-gray-50 dark:hover:bg-gray-700 rounded-lg transition-colors"
             >
             <div className="w-8 h-8 rounded-full overflow-hidden">
               <img src="/favicon-96x96.png" alt="ModelBench" className="w-full h-full object-cover" />
@@ -428,14 +428,14 @@ export const Sidebar: React.FC = () => {
             onClick={(e) => e.stopPropagation()}
           >
             {/* 弹窗标题栏 */}
-            <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-700">
+            <div className="flex items-center justify-between p-2 border-b border-gray-200 dark:border-gray-700">
               <div className="flex items-center space-x-3">
                 <div className="w-10 h-10 rounded-full overflow-hidden">
                   <img src="/favicon-96x96.png" alt="ModelBench" className="w-full h-full object-cover" />
                 </div>
                 <div>
                   <h3 className="text-lg font-semibold text-gray-900 dark:text-white">ModelBench</h3>
-                  <p className="text-sm text-gray-500 dark:text-gray-400">管理您的账户和偏好设置</p>
+                  <p className="text-sm text-gray-500 dark:text-gray-400">管理您的账户和设置</p>
                 </div>
               </div>
               <button
@@ -477,7 +477,7 @@ export const Sidebar: React.FC = () => {
             </div>
 
             {/* 内容区域 */}
-            <div className="p-6 overflow-y-auto flex-1">
+            <div className="p-2 overflow-y-auto flex-1">
               {activeTab === 'api' && (
                 <div className="space-y-4">
                   <div className="flex items-center justify-between">
@@ -500,7 +500,7 @@ export const Sidebar: React.FC = () => {
                 <div className="space-y-4">
                   <div className="flex items-center justify-between">
                     <h4 className="text-lg font-medium text-gray-900 dark:text-white">功能介绍</h4>
-                    <button className="text-sm text-blue-600 hover:text-blue-700 px-3 py-1 bg-blue-50 dark:bg-blue-900/20 dark:text-blue-400 dark:hover:text-blue-300 rounded-md transition-colors">
+                    <button className="text-sm text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 px-3 py-1 bg-gray-100 dark:bg-gray-700 rounded-md transition-colors">
                       分享
                     </button>
                   </div>
@@ -509,7 +509,7 @@ export const Sidebar: React.FC = () => {
                     <div>
                       <h5 className="font-medium text-gray-900 dark:text-white mb-3">核心功能</h5>
                       <div className="space-y-3">
-                        <div className="bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-900/30 dark:to-indigo-900/30 rounded-lg p-4 border border-blue-100 dark:border-blue-800">
+                        <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
                           <h6 className="font-medium text-gray-800 dark:text-gray-200 mb-2 flex items-center">
                             多模型并行对比
                           </h6>
@@ -520,7 +520,7 @@ export const Sidebar: React.FC = () => {
                           </ul>
                         </div>
                         
-                        <div className="bg-gradient-to-r from-green-50 to-emerald-50 dark:from-green-900/30 dark:to-emerald-900/30 rounded-lg p-4 border border-green-100 dark:border-green-800">
+                        <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
                           <h6 className="font-medium text-gray-800 dark:text-gray-200 mb-2 flex items-center">
                             系统提示词管理
                           </h6>
@@ -531,7 +531,7 @@ export const Sidebar: React.FC = () => {
                           </ul>
                         </div>
                         
-                        <div className="bg-gradient-to-r from-purple-50 to-violet-50 dark:from-purple-900/30 dark:to-violet-900/30 rounded-lg p-4 border border-purple-100 dark:border-purple-800">
+                        <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
                           <h6 className="font-medium text-gray-800 dark:text-gray-200 mb-2 flex items-center">
                             智能分析统计
                           </h6>
@@ -625,15 +625,15 @@ export const Sidebar: React.FC = () => {
                     <div className="space-y-2 text-sm">
                       <div className="flex justify-between items-center">
                         <span className="text-gray-700 dark:text-gray-300">1. GPT-4</span>
-                        <span className="text-blue-600 font-medium">45%</span>
+                        <span className="text-gray-600 dark:text-gray-400 font-medium">45%</span>
                       </div>
                       <div className="flex justify-between items-center">
                         <span className="text-gray-700 dark:text-gray-300">2. Claude-3</span>
-                        <span className="text-green-600 font-medium">32%</span>
+                        <span className="text-gray-600 dark:text-gray-400 font-medium">32%</span>
                       </div>
                       <div className="flex justify-between items-center">
                         <span className="text-gray-700 dark:text-gray-300">3. DeepSeek</span>
-                        <span className="text-purple-600 font-medium">23%</span>
+                        <span className="text-gray-600 dark:text-gray-400 font-medium">23%</span>
                       </div>
                     </div>
                   </div>
@@ -646,7 +646,7 @@ export const Sidebar: React.FC = () => {
                   
                   <div className="text-center space-y-4">
                     {/* 二维码区域 */}
-                    <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-xl p-6 border border-green-200">
+                    <div className="bg-gray-50 dark:bg-gray-800 rounded-xl p-6 border border-gray-200 dark:border-gray-700">
                       <div className="w-40 h-40 bg-white rounded-lg mx-auto flex items-center justify-center shadow-sm border-2 border-gray-200 p-2">
                         <img 
                           src="/wx.png" 
@@ -742,4 +742,4 @@ export const Sidebar: React.FC = () => {
       )}
     </div>
   );
-}; 
+};

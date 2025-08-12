@@ -5,6 +5,7 @@ import TypewriterEffect from '@/components/TypewriterEffect';
 import MarkdownRenderer from '@/components/MarkdownRenderer';
 import ReasoningDisplay from '@/components/ReasoningDisplay';
 import { ModelResponse, Message } from '@/types';
+import { formatTokenAndCost } from '@/utils/modelPricing';
 
 interface ModelResponseMatrixProps {
   currentResponses: { [key: string]: ModelResponse };
@@ -159,7 +160,7 @@ export const ModelResponseMatrix: React.FC<ModelResponseMatrixProps> = ({
   return (
     <div className="w-full max-w-full relative">
       {/* 固定表头：主题版本信息（横向） */}
-      <div className="sticky top-0 bg-white dark:bg-gray-900 z-30 pb-4 border-b border-gray-200 dark:border-gray-700"
+      <div className="sticky top-0 bg-white dark:bg-gray-900 z-30 pb-2 pt-2 border-b border-gray-200 dark:border-gray-700"
            style={{ backdropFilter: 'blur(8px)' }}>
         <div className="w-full overflow-x-auto">
           <div style={{ minWidth: `${Math.max(600, themesWithVersions.length * 200 + 150)}px` }}>
@@ -285,20 +286,21 @@ export const ModelResponseMatrix: React.FC<ModelResponseMatrixProps> = ({
                         {/* 对话内容区域 */}
                         <div className="p-4 h-full flex flex-col min-h-0">
                           <div className="flex-1 min-h-0 overflow-y-auto max-h-[400px] space-y-3 scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100 dark:scrollbar-thumb-gray-600 dark:scrollbar-track-gray-800">
-                            {/* 显示所有对话历史 */}
-                            {messages.map((message, messageIndex) => {
-                              const isLastMessage = messageIndex === messages.length - 1;
+                            {/* 只显示最新的用户消息和AI响应 */}
+                            {(() => {
+                              const lastMessage = messages[messages.length - 1];
+                              if (!lastMessage) return null;
 
                               return (
-                                <div key={message.id} className="space-y-2" data-message-id={message.id}>
+                                <div className="space-y-2" data-message-id={lastMessage.id}>
                                   {/* 用户消息 */}
                                   <div>
                                     <div className="text-xs text-gray-500 dark:text-gray-400 mb-1">用户</div>
                                     <div className="bg-blue-50 dark:bg-blue-900/30 p-3 rounded-lg text-sm">
-                                      <div className="whitespace-pre-wrap">{message.content}</div>
-                                      {message.images && message.images.length > 0 && (
+                                      <div className="whitespace-pre-wrap">{lastMessage.content}</div>
+                                      {lastMessage.images && lastMessage.images.length > 0 && (
                                         <div className="mt-2 flex flex-wrap gap-2">
-                                          {message.images.map((image, idx) => (
+                                          {lastMessage.images.map((image, idx) => (
                                             <img
                                               key={idx}
                                               src={image}
@@ -312,65 +314,40 @@ export const ModelResponseMatrix: React.FC<ModelResponseMatrixProps> = ({
                                   </div>
 
                                   {/* AI响应 */}
-                                  {(() => {
-                                    if (isLastMessage && response) {
-                                      // 最新消息，显示实时响应
-                                      return (
-                                        <div>
-                                          <div className="text-xs text-gray-500 dark:text-gray-400 mb-1 flex items-center space-x-2">
-                                            <span>{model.name}</span>
-                                            {!response.isComplete && (
-                                              <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse"></div>
-                                            )}
-                                          </div>
-                                          {/* 思考过程显示 */}
-                                          {response.reasoning_content && (
-                                            <ReasoningDisplay 
-                                              content={response.reasoning_content}
-                                              isLoading={!response.isComplete}
+                                  {response && (
+                                    <div>
+                                      <div className="text-xs text-gray-500 dark:text-gray-400 mb-1 flex items-center space-x-2">
+                                        <span>{model.name}</span>
+                                        <span className="text-gray-400 dark:text-gray-500">| {formatTokenAndCost(model.name, response.usage, response.totalResponseTime || response.responseTime)}</span>
+                                        {!response.isComplete && (
+                                          <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse"></div>
+                                        )}
+                                      </div>
+                                      {/* 思考过程显示 */}
+                                      {response.reasoning_content && (
+                                        <ReasoningDisplay 
+                                          content={response.reasoning_content}
+                                          isLoading={!response.isComplete}
+                                        />
+                                      )}
+                                      
+                                      <div className="bg-gray-50 dark:bg-gray-700 p-3 rounded-lg text-sm">
+                                        {!response.isComplete ? (
+                                          <div className="whitespace-pre-wrap text-gray-900 dark:text-gray-100">
+                                            <TypewriterEffect 
+                                              text={response.content}
+                                              delay={30}
                                             />
-                                          )}
-                                          
-                                          <div className="bg-gray-50 dark:bg-gray-700 p-3 rounded-lg text-sm">
-                                            {!response.isComplete ? (
-                                              <div className="whitespace-pre-wrap text-gray-900 dark:text-gray-100">
-                                                <TypewriterEffect 
-                                                  text={response.content}
-                                                  delay={30}
-                                                />
-                                              </div>
-                                            ) : (
-                                              <MarkdownRenderer content={response.content} />
-                                            )}
                                           </div>
-                                        </div>
-                                      );
-                                    } else if (!isLastMessage) {
-                                      // 历史消息，从会话中获取响应
-                                      const historyResponse = currentSession?.responses[model.id]?.[message.id];
-                                      if (historyResponse?.content) {
-                                        return (
-                                          <div>
-                                            <div className="text-xs text-gray-500 dark:text-gray-400 mb-1">{model.name}</div>
-                                            {/* 历史消息的思考过程显示 */}
-                                            {historyResponse.reasoning_content && (
-                                              <ReasoningDisplay 
-                                                content={historyResponse.reasoning_content}
-                                                isLoading={false}
-                                              />
-                                            )}
-                                            <div className="bg-gray-50 dark:bg-gray-700 p-3 rounded-lg text-sm">
-                                              <MarkdownRenderer content={historyResponse.content} />
-                                            </div>
-                                          </div>
-                                        );
-                                      }
-                                    }
-                                    return null;
-                                  })()}
+                                        ) : (
+                                          <MarkdownRenderer content={response.content} />
+                                        )}
+                                      </div>
+                                    </div>
+                                  )}
                                 </div>
                               );
-                            })}
+                            })()}
                           </div>
                         </div>
                       </div>

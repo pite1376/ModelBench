@@ -2,6 +2,11 @@ import React from 'react'
 import ReactDOM from 'react-dom/client'
 import App from './App.tsx'
 import './index.css'
+
+// 导入Supabase测试工具（开发环境）
+if (import.meta.env.DEV) {
+  import('./utils/supabase-test');
+}
 import { ErrorBoundary } from './utils/errorBoundary'
 import { logger } from './utils/logger'
 // import { useAppStore } from './store'

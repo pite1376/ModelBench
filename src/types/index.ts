@@ -1,5 +1,5 @@
 // AI模型提供商
-export type AIProvider = 'deepseek' | 'aliyun' | 'volcengine' | 'kimi' | 'claude';
+export type AIProvider = 'deepseek' | 'aliyun' | 'volcengine' | 'kimi' | 'claude' | 'bigmodel';
 
 // 模型配置
 export interface ModelConfig {
@@ -14,6 +14,15 @@ export interface ModelConfig {
   costPerToken?: number;
   isReasoner?: boolean; // 是否为深度思考模型
   description?: string; // 模型介绍
+}
+
+// 自定义模型
+export interface CustomModel {
+  id: string;
+  name: string;
+  provider: string;
+  modelId: string;
+  description: string;
 }
 
 // API密钥配置
@@ -32,6 +41,13 @@ export interface Message {
   images?: string[]; // base64格式的图片
 }
 
+// Token使用统计
+export interface UsageData {
+  prompt_tokens: number;
+  completion_tokens: number;
+  total_tokens: number;
+}
+
 // 模型响应
 export interface ModelResponse {
   modelId?: string; // 可选
@@ -40,10 +56,17 @@ export interface ModelResponse {
   loading?: boolean; // 可选，兼容旧版本
   isComplete?: boolean; // 添加新的完成状态标识
   error?: string;
-  responseTime?: number;
+  responseTime?: number; // 兼容旧版本，总响应时间
+  // 新增响应时间监控字段
+  startTime?: number; // 开始请求时间戳（毫秒）
+  firstResponseTime?: number; // 首次响应时间戳（毫秒）
+  endTime?: number; // 响应完成时间戳（毫秒）
+  totalResponseTime?: number; // 总响应时间（毫秒）
+  firstByteLatency?: number; // 首字节延迟（毫秒）
   tokens?: number;
   tokenCount?: number; // 兼容新的token计数
   cost?: number;
+  usage?: UsageData; // 真实的Token使用数据
   timestamp: Date;
 }
 
@@ -143,6 +166,7 @@ export interface AppState {
   // 模型配置
   availableModels: ModelConfig[];
   selectedModels: string[];
+  customModels: CustomModel[];
   
   // 当前会话
   currentSession: ChatSession | null;
@@ -174,6 +198,7 @@ export interface ChatResponse {
   tokenCount?: number; // 添加tokenCount属性
   cost?: number;
   responseTime?: number; // 可选
+  usage?: UsageData; // 添加usage字段
 }
 
 // 流式响应块
@@ -183,7 +208,11 @@ export interface StreamChunk {
   finished: boolean;
   tokens?: number;
   cost?: number;
+  usage?: UsageData; // 添加usage字段以支持阿里云等提供商的token统计
+  // 响应时间监控字段
+  responseTime?: number; // 总响应时间（毫秒）
+  firstResponseTime?: number; // 首次响应延迟（毫秒）
 }
 
 // 流式响应回调
-export type StreamCallback = (chunk: StreamChunk) => void; 
+export type StreamCallback = (chunk: StreamChunk) => void;

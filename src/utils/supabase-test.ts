@@ -1,136 +1,135 @@
 import { supabase } from '@/lib/supabaseClient';
 
-// Supabase连接测试工具
-export class SupabaseTestTool {
-  // 测试基本连接
-  static async testConnection(): Promise<{ success: boolean; message: string; error?: any }> {
-    try {
-      const { data, error } = await supabase
-        .from('users')
-        .select('count', { count: 'exact' })
-        .limit(1);
-      
-      if (error) {
-        return {
-          success: false,
-          message: `数据库连接失败: ${error.message}`,
-          error
-        };
-      }
-      
-      return {
-        success: true,
-        message: `数据库连接成功，users表记录数: ${data ? (data as any).length : 0}`
-      };
-    } catch (error: any) {
+// 测试Supabase连接和数据库配置
+export async function testSupabaseConnection() {
+  console.log('🔍 Testing Supabase connection...');
+  
+  try {
+    // 1. 测试基本连接
+    const { data: healthCheck, error: healthError } = await supabase
+      .from('analytics_events')
+      .select('count')
+      .limit(1);
+    
+    if (healthError) {
+      console.error('❌ Supabase connection failed:', healthError);
       return {
         success: false,
-        message: `连接测试异常: ${error.message}`,
-        error
+        error: healthError,
+        message: 'Failed to connect to Supabase database'
       };
     }
-  }
-
-  // 测试表结构
-  static async testTables(): Promise<{ success: boolean; tables: string[]; message: string }> {
-    const requiredTables = ['users', 'chat_sessions', 'messages', 'model_usage_stats', 'user_settings'];
-    const existingTables: string[] = [];
-    const errors: string[] = [];
-
-    for (const table of requiredTables) {
-      try {
-        const { error } = await supabase
-          .from(table)
-          .select('*', { count: 'exact' })
-          .limit(1);
-        
-        if (error) {
-          errors.push(`${table}: ${error.message}`);
-        } else {
-          existingTables.push(table);
-        }
-      } catch (err: any) {
-        errors.push(`${table}: ${err.message}`);
-      }
-    }
-
-    return {
-      success: existingTables.length === requiredTables.length,
-      tables: existingTables,
-      message: errors.length > 0 
-        ? `部分表不存在或无权限: ${errors.join(', ')}` 
-        : '所有必需的表都存在且可访问'
+    
+    console.log('✅ Supabase connection successful');
+    
+    // 2. 测试插入数据
+    const testEvent = {
+      type: 'test_event',
+      payload: { test: true, timestamp: new Date().toISOString() },
+      timestamp: Date.now(),
+      user_anonymous_id: 'test-user-' + Date.now()
     };
-  }
-
-  // 测试创建用户
-  static async testCreateUser(): Promise<{ success: boolean; message: string; userId?: string }> {
-    try {
-      const testUser = {
-        anonymous_id: `test-${Date.now()}`,
-        user_type: 'anonymous' as const,
-        email_verified: false,
-        total_sessions: 0,
-        total_messages: 0,
-        preferences: {},
-        created_at: new Date().toISOString(),
-        last_active: new Date().toISOString(),
-      };
-
-      const { data, error } = await supabase
-        .from('users')
-        .insert([testUser])
-        .select()
-        .single();
-
-      if (error) {
-        return {
-          success: false,
-          message: `创建测试用户失败: ${error.message}`
-        };
-      }
-
-      // 清理测试数据
-      await supabase.from('users').delete().eq('id', data.id);
-
-      return {
-        success: true,
-        message: '用户创建测试成功（已清理测试数据）',
-        userId: data.id
-      };
-    } catch (error: any) {
+    
+    const { data: insertData, error: insertError } = await supabase
+      .from('analytics_events')
+      .insert([testEvent])
+      .select();
+    
+    if (insertError) {
+      console.error('❌ Failed to insert test data:', insertError);
       return {
         success: false,
-        message: `创建用户测试异常: ${error.message}`
+        error: insertError,
+        message: 'Database connection works but insert failed. Check RLS policies.'
       };
     }
-  }
-
-  // 完整诊断
-  static async diagnose(): Promise<{
-    connection: boolean;
-    tables: boolean;
-    permissions: boolean;
-    details: any;
-  }> {
-    const connectionTest = await this.testConnection();
-    const tablesTest = await this.testTables();
-    const permissionsTest = await this.testCreateUser();
-
+    
+    console.log('✅ Test data inserted successfully:', insertData);
+    
+    // 3. 测试查询数据
+    const { data: queryData, error: queryError } = await supabase
+      .from('analytics_events')
+      .select('*')
+      .eq('type', 'test_event')
+      .limit(5);
+    
+    if (queryError) {
+      console.error('❌ Failed to query data:', queryError);
+      return {
+        success: false,
+        error: queryError,
+        message: 'Insert works but query failed. Check RLS policies.'
+      };
+    }
+    
+    console.log('✅ Data query successful:', queryData);
+    
     return {
-      connection: connectionTest.success,
-      tables: tablesTest.success,
-      permissions: permissionsTest.success,
-      details: {
-        connection: connectionTest,
-        tables: tablesTest,
-        permissions: permissionsTest
+      success: true,
+      message: 'All Supabase tests passed successfully!',
+      data: {
+        insertedRecords: insertData?.length || 0,
+        queriedRecords: queryData?.length || 0
       }
+    };
+    
+  } catch (error) {
+    console.error('❌ Unexpected error during Supabase test:', error);
+    return {
+      success: false,
+      error,
+      message: 'Unexpected error occurred during testing'
     };
   }
 }
 
-// 在控制台中暴露测试工具
+// 检查数据库表结构
+export async function checkDatabaseSchema() {
+  console.log('🔍 Checking database schema...');
+  
+  try {
+    // 检查analytics_events表是否存在
+    const { data, error } = await supabase
+      .from('analytics_events')
+      .select('*')
+      .limit(0);
+    
+    if (error) {
+      if (error.code === 'PGRST116') {
+        return {
+          success: false,
+          message: 'analytics_events table does not exist. Please run the SQL scripts in Supabase console.'
+        };
+      }
+      return {
+        success: false,
+        error,
+        message: 'Failed to check table schema'
+      };
+    }
+    
+    return {
+      success: true,
+      message: 'analytics_events table exists and is accessible'
+    };
+    
+  } catch (error) {
+    return {
+      success: false,
+      error,
+      message: 'Error checking database schema'
+    };
+  }
+}
+
+// 在浏览器控制台中运行测试
 if (typeof window !== 'undefined') {
-  (window as any).__testSupabase = SupabaseTestTool;
-} 
+  // 将测试函数暴露到全局作用域，方便在控制台调试
+  (window as any).testSupabase = testSupabaseConnection;
+  (window as any).testSupabaseConnection = testSupabaseConnection;
+  (window as any).checkSchema = checkDatabaseSchema;
+  
+  console.log('🔧 Supabase test functions available:');
+  console.log('- Run testSupabase() or testSupabaseConnection() to test connection and operations');
+  console.log('- Run checkSchema() to check if tables exist');
+}

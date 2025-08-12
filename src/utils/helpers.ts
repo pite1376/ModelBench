@@ -112,6 +112,9 @@ export const validateApiKey = (provider: string, key: string): boolean => {
     case 'claude':
       // Extremely loose validation: just check if it's a non-empty string after trim
       return key.trim().length > 0;
+    case 'bigmodel':
+      // 智谱AI API Key格式：两部分用点号分隔的字母数字组合
+      return /^[a-zA-Z0-9]+\.[a-zA-Z0-9]+$/.test(key) && key.includes('.');
     default:
       return false;
   }
@@ -180,4 +183,4 @@ export const compressImage = (file: File, maxWidth = 800, quality = 0.8): Promis
     
     img.src = URL.createObjectURL(file);
   });
-}; 
+};

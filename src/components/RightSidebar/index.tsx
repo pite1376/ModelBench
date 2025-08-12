@@ -1,7 +1,8 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { ChevronLeft, ChevronRight, MessageSquare, Send, Maximize2, Minimize2, Paperclip, Loader2, CheckCircle, Globe, Plus } from 'lucide-react';
+import { Send, Maximize2, Minimize2, Paperclip, Loader2, CheckCircle, Globe, Plus } from 'lucide-react';
 import { useAppStore } from '@/store';
 import { AVAILABLE_MODELS, PROVIDERS } from '@/lib/models';
+import { toast } from 'sonner';
 
 interface RightSidebarProps {
   onSendMessage?: () => void;
@@ -35,12 +36,20 @@ const RightSidebar: React.FC<RightSidebarProps> = ({
     selectedFiles,
     setSelectedFiles,
     fileInputRef,
-    createNewSession
+    createNewSession,
+    getAllModels,
+    isWebSearchEnabled,
+    setWebSearchEnabled,
+    getApiKey
   } = useAppStore();
 
   // 使用props或store中的数据
   const selectedModels = propSelectedModels || getCurrentSelectedModels();
   const isLoading = propIsLoading !== undefined ? propIsLoading : getCurrentIsLoading();
+  
+  // 检查智谱API密钥是否已配置
+  const bigmodelApiKey = getApiKey('bigmodel');
+  const canUseWebSearch = bigmodelApiKey && bigmodelApiKey.trim() !== '';
   
   // 添加状态来强制重新渲染
   const [forceUpdate, setForceUpdate] = useState(0);
@@ -64,106 +73,25 @@ const RightSidebar: React.FC<RightSidebarProps> = ({
     setCurrentSessionData(session);
   }, [currentSession, getCurrentSession, forceUpdate]);
 
-  // 侧边栏状态
-  const [isExpanded, setIsExpanded] = useState(false);
-  const [sidebarWidth, setSidebarWidth] = useState(320);
+  // 输入框状态
   const [inputExpanded, setInputExpanded] = useState(false);
-  
-  // 拖拽调整宽度的状态
-  const [isResizing, setIsResizing] = useState(false);
-  const [startX, setStartX] = useState(0);
-  const [startWidth, setStartWidth] = useState(sidebarWidth);
-  const [tempWidth, setTempWidth] = useState(sidebarWidth);
-  const animationFrameRef = useRef<number | null>(null);
-  const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
-  // 拖拽处理函数
-  const handleMouseDown = (e: React.MouseEvent) => {
-    if (!isExpanded) return;
-    
-    setIsResizing(true);
-    setStartX(e.clientX);
-    setStartWidth(sidebarWidth);
-    e.preventDefault();
+  // 计算动态高度
+  const getContainerHeight = () => {
+    if (inputExpanded) {
+      return '380px'; // 180px + 200px
+    }
+    return '180px';
   };
 
-  const handleMouseMove = React.useCallback((e: MouseEvent) => {
-    if (!isResizing) return;
-    
-    if (animationFrameRef.current) {
-      cancelAnimationFrame(animationFrameRef.current);
+  const getInputAreaHeight = () => {
+    if (inputExpanded) {
+      return hasModelStatus ? '320px' : '340px'; // 为模型状态按钮留出空间
     }
-    
-    animationFrameRef.current = requestAnimationFrame(() => {
-      const deltaX = startX - e.clientX; // 右侧边栏向左拖拽增加宽度
-      const newWidth = startWidth + deltaX;
-      
-      const minWidth = 280;
-      const maxWidth = 500;
-      const constrainedWidth = Math.max(minWidth, Math.min(maxWidth, newWidth));
-      
-      setTempWidth(constrainedWidth);
-      
-      if (saveTimeoutRef.current) {
-        clearTimeout(saveTimeoutRef.current);
-      }
-      
-      saveTimeoutRef.current = setTimeout(() => {
-        setSidebarWidth(constrainedWidth);
-      }, 16);
-    });
-  }, [isResizing, startX, startWidth]);
+    return hasModelStatus ? '120px' : '140px';
+  };
 
-  const handleMouseUp = React.useCallback(() => {
-    setIsResizing(false);
-    
-    if (animationFrameRef.current) {
-      cancelAnimationFrame(animationFrameRef.current);
-      animationFrameRef.current = null;
-    }
-    
-    if (saveTimeoutRef.current) {
-      clearTimeout(saveTimeoutRef.current);
-      saveTimeoutRef.current = null;
-    }
-    setSidebarWidth(tempWidth);
-  }, [tempWidth]);
 
-  // 添加全局鼠标事件监听
-  useEffect(() => {
-    if (isResizing) {
-      document.addEventListener('mousemove', handleMouseMove);
-      document.addEventListener('mouseup', handleMouseUp);
-      document.body.style.cursor = 'col-resize';
-      document.body.style.userSelect = 'none';
-      
-      return () => {
-        document.removeEventListener('mousemove', handleMouseMove);
-        document.removeEventListener('mouseup', handleMouseUp);
-        document.body.style.cursor = '';
-        document.body.style.userSelect = '';
-      };
-    }
-  }, [isResizing, handleMouseMove, handleMouseUp]);
-
-  // 组件卸载时清理
-  useEffect(() => {
-    return () => {
-      if (animationFrameRef.current) {
-        cancelAnimationFrame(animationFrameRef.current);
-      }
-      if (saveTimeoutRef.current) {
-        clearTimeout(saveTimeoutRef.current);
-      }
-    };
-  }, []);
-
-  // 同步tempWidth
-  useEffect(() => {
-    if (!isResizing) {
-      setTempWidth(sidebarWidth);
-    }
-  }, [sidebarWidth, isResizing]);
 
   // 跳转到对应模型的对话区域
   const scrollToModel = (modelId: string) => {
@@ -174,7 +102,15 @@ const RightSidebar: React.FC<RightSidebarProps> = ({
     }
     
     // 备用方案：通过ID查找元素
-    const modelElement = document.getElementById(`model-${modelId}`);
+    // 先尝试多提示词模式的ID格式
+    let modelElement = document.getElementById(`model-row-${modelId}`);
+    if (modelElement) {
+      modelElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      return;
+    }
+    
+    // 再尝试单提示词模式的ID格式
+    modelElement = document.getElementById(`model-${modelId}`);
     if (modelElement) {
       modelElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
     }
@@ -222,337 +158,182 @@ const RightSidebar: React.FC<RightSidebarProps> = ({
     }
   };
 
+  // 检查是否有模型状态需要显示
+  const hasModelStatus = selectedModels.length > 0 && currentSessionData?.messages && currentSessionData.messages.length > 0;
+
   return (
-    <div className="fixed top-1 right-1 z-50">
-      {/* 收起状态的按钮组 - 位置移到页面中间 */}
-      {!isExpanded && (
-        <div
-          className="flex flex-col space-y-3"
-          style={{
-            position: 'fixed',
-            top: '50%',
-            right: '20px',
-            transform: 'translateY(-50%)',
-            zIndex: 50
-          }}
-        >
-          {/* 对话面板按钮 */}
-          <button
-            onClick={() => setIsExpanded(true)}
-            className="w-12 h-12 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-full shadow-lg hover:shadow-xl transition-all duration-300 flex items-center justify-center group"
-            title="展开对话面板"
-          >
-            <img src="/modelbench-logo.svg" alt="ModelBench" className="w-6 h-6" />
-          </button>
-          
-          {/* 新建对话按钮 */}
-          <button
-            onClick={() => {
-              createNewSession();
-              setIsExpanded(true);
-            }}
-            className="w-12 h-12 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 border border-gray-200 dark:border-gray-700 rounded-full shadow-lg hover:shadow-xl transition-all duration-300 flex items-center justify-center text-gray-700 dark:text-gray-300"
-            title="新建对话"
-          >
-            <Plus size={20} />
-          </button>
+    <div 
+      className="bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 flex flex-col transition-all duration-300" 
+      style={{ height: getContainerHeight() }}
+    >
+      {/* 模型状态按钮区域 - 只显示按钮，无标题和分割线 */}      {hasModelStatus && (
+        <div className="px-1.5 flex-shrink-0" style={{ paddingTop: '6px'}}>
+          <div className="flex flex-wrap gap-2">
+            {selectedModels.map((modelId) => {
+              const model = getAllModels().find(m => m.id === modelId);
+              if (!model) return null;
+
+              const provider = PROVIDERS[model.provider];
+              const lastMessage = currentSessionData.messages[currentSessionData.messages.length - 1];
+              const response = currentSessionData?.responses?.[modelId]?.[lastMessage?.id];
+              const isModelLoading = isLoading && response && !response.isComplete;
+              const isComplete = response && response.isComplete;
+              const hasError = response?.error;
+
+              return (
+                <button
+                  key={modelId}
+                  onClick={() => scrollToModel(modelId)}
+                  className="flex items-center space-x-2 px-3 py-1.5 bg-gray-50 dark:bg-gray-700/50 hover:bg-gray-100 dark:hover:bg-gray-600/50 rounded-lg border border-gray-200/60 dark:border-gray-600/60 transition-all duration-200 text-sm"
+                >
+                  <div 
+                    className="w-2 h-2 rounded-full"
+                    style={{ backgroundColor: provider.color }}
+                  />
+                  <span className="text-gray-900 dark:text-white font-medium">
+                    {model.name}
+                  </span>
+                  {isModelLoading && (
+                    <Loader2 size={12} className="text-blue-500 animate-spin" />
+                  )}
+                  {isComplete && !hasError && (
+                    <CheckCircle size={12} className="text-green-500" />
+                  )}
+                  {hasError && (
+                    <div className="w-3 h-3 rounded-full bg-red-500" title={`错误: ${response.error}`} />
+                  )}
+                </button>
+              );
+            })}
+          </div>
         </div>
       )}
 
-      {/* 展开状态的侧边栏 - 与左侧边栏保持一致的样式 */}
-      {isExpanded && (
-        <div
-          className={`
-            bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 
-            rounded-lg shadow-xl flex flex-col overflow-hidden relative mr-1
-            ${isResizing ? '' : 'transition-all duration-300 ease-in-out'}
-          `}
-          style={{
-            width: isResizing ? `${tempWidth}px` : `${sidebarWidth}px`,
-            height: 'calc(100vh - 0.5rem)',
-            minWidth: '280px',
-            maxWidth: '500px'
-          }}
-        >
-          {/* 头部 - 与左侧边栏保持一致 */}
-          <div className="p-3 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between flex-shrink-0">
-            <div className="flex items-center space-x-2">
-              <img src="/modelbench-logo.svg" alt="ModelBench" className="w-4 h-4" />
-              <span className="text-sm font-medium text-gray-900 dark:text-white">对话面板</span>
-            </div>
-            <button
-              onClick={() => setIsExpanded(false)}
-              className="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition-colors"
-              title="收起面板"
-            >
-              <ChevronRight size={16} className="text-gray-500 dark:text-gray-400" />
-            </button>
-          </div>
-
-          {/* 对话区域 - 显示对话历史 */}
-          <div className="flex-1 overflow-y-auto overflow-x-hidden min-h-0">
-            <div className="space-y-0">
-              {/* 当前输入预览 */}
-              {inputMessage.trim() && (
-                <div className="border-b border-gray-200 dark:border-gray-700 p-4">
-                  <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-3 border border-blue-200 dark:border-blue-800">
-                    <div className="text-xs text-blue-600 dark:text-blue-400 mb-1 font-medium">当前输入</div>
-                    <div className="text-sm text-gray-900 dark:text-white break-words leading-relaxed">
-                      {inputMessage}
-                    </div>
-                  </div>
+      {/* 输入区域 */}
+      <div 
+        className="p-1.5 flex-1 flex flex-col transition-all duration-300" 
+        style={{ height: getInputAreaHeight() }}
+      >
+        {/* 文件预览 */}
+        {selectedFiles.length > 0 && (
+          <div className="mb-3 flex flex-wrap gap-2">
+            {selectedFiles.map((file, index) => (
+              <div key={index} className="relative group">
+                <div className="w-8 h-8 rounded-lg overflow-hidden border border-gray-300 dark:border-gray-600 bg-gray-100 dark:bg-gray-700">
+                  <img
+                    src={URL.createObjectURL(file)}
+                    alt={`Upload ${index}`}
+                    className="w-full h-full object-cover"
+                  />
                 </div>
-              )}
-
-              {/* 对话历史 */}
-              {currentSessionData?.messages && currentSessionData.messages.length > 0 ? (
-                <div className="space-y-0">
-                  {currentSessionData.messages.map((message: any, index: number) => (
-                    <div key={message.id}>
-                      {/* 用户消息 */}
-                      <div className="p-4">
-                        <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-3 border border-blue-200 dark:border-blue-800">
-                          <div className="text-xs text-blue-600 dark:text-blue-400 mb-1 font-medium">
-                            用户 · {new Date(message.timestamp).toLocaleTimeString()}
-                          </div>
-                          <div className="text-sm text-gray-900 dark:text-white break-words leading-relaxed">
-                            {message.content}
-                          </div>
-                          {message.images && message.images.length > 0 && (
-                            <div className="mt-2 flex flex-wrap gap-2">
-                              {message.images.map((image: any, imgIndex: number) => (
-                                <img
-                                  key={imgIndex}
-                                  src={image}
-                                  alt={`附件 ${imgIndex + 1}`}
-                                  className="w-16 h-16 object-cover rounded border border-blue-200 dark:border-blue-800"
-                                />
-                              ))}
-                            </div>
-                          )}
-                        </div>
-                      </div>
-
-                      {/* 模型回复状态 */}
-                      {selectedModels.length > 0 && (
-                        <div className="px-4 pb-4">
-                          <div className="text-xs font-medium text-gray-700 dark:text-gray-300 mb-2">
-                            模型回复状态
-                          </div>
-                          <div className="space-y-2">
-                            {selectedModels.map((modelId) => {
-                              const model = AVAILABLE_MODELS.find(m => m.id === modelId);
-                              if (!model) return null;
-
-                              const provider = PROVIDERS[model.provider];
-                              const response = currentSessionData?.responses?.[modelId]?.[message.id];
-                              const isModelLoading = isLoading && response && !response.isComplete;
-                              const hasResponse = response && response.content;
-                              const isComplete = response && response.isComplete;
-
-                              return (
-                                <button
-                                  key={modelId}
-                                  onClick={() => scrollToModel(modelId)}
-                                  className="w-full text-left p-3 bg-gray-50 dark:bg-gray-700/50 hover:bg-gray-100 dark:hover:bg-gray-600/50 rounded-lg border border-gray-200/60 dark:border-gray-600/60 transition-all duration-200 group hover:shadow-sm"
-                                >
-                                  <div className="flex items-center justify-between mb-2">
-                                    <div className="flex items-center space-x-2">
-                                      <div 
-                                        className="w-2.5 h-2.5 rounded-full"
-                                        style={{ backgroundColor: provider.color }}
-                                      />
-                                      <span className="text-sm font-medium text-gray-900 dark:text-white">
-                                        {model.name}
-                                      </span>
-                                      {isModelLoading && (
-                                        <Loader2 size={12} className="text-blue-500 animate-spin" />
-                                      )}
-                                      {isComplete && (
-                                        <CheckCircle size={12} className="text-green-500" />
-                                      )}
-                                    </div>
-                                    <ChevronRight size={12} className="text-gray-400 group-hover:text-gray-600 dark:group-hover:text-gray-300 transition-colors" />
-                                  </div>
-                                  {hasResponse && (
-                                    <div className="text-xs text-gray-500 dark:text-gray-400 line-clamp-2 leading-relaxed">
-                                      {response.content.length > 60 ? 
-                                        response.content.substring(0, 60) + '...' : 
-                                        response.content
-                                      }
-                                    </div>
-                                  )}
-                                  {response?.error && (
-                                    <div className="text-xs text-red-500 dark:text-red-400 line-clamp-1 leading-relaxed">
-                                      错误: {response.error}
-                                    </div>
-                                  )}
-                                </button>
-                              );
-                            })}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                /* 空状态 */
-                <div className="p-4">
-                  <div className="text-center py-12">
-                    <img src="/modelbench-logo.svg" alt="ModelBench" className="w-12 h-12 mx-auto mb-4 opacity-30" />
-                    <p className="text-gray-500 dark:text-gray-400 text-sm leading-relaxed">
-                      {selectedModels.length === 0 ? '请先选择模型开始对话' : '暂无对话记录'}
-                    </p>
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* 输入区域 - 固定在底部 */}
-          <div className="border-t border-gray-200 dark:border-gray-700 p-4 flex-shrink-0">
-            {/* 文件预览 */}
-            {selectedFiles.length > 0 && (
-              <div className="mb-3 flex flex-wrap gap-2">
-                {selectedFiles.map((file, index) => (
-                  <div key={index} className="relative group">
-                    <div className="w-12 h-12 rounded-lg overflow-hidden border border-gray-300 dark:border-gray-600 bg-gray-100 dark:bg-gray-700">
-                      <img
-                        src={URL.createObjectURL(file)}
-                        alt={`Upload ${index}`}
-                        className="w-full h-full object-cover"
-                      />
-                    </div>
-                    <button
-                      onClick={() => handleRemoveFile(index)}
-                      className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full w-4 h-4 flex items-center justify-center text-xs opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-600"
-                      title="移除图片"
-                    >
-                      ×
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            {/* 现代化输入框 */}
-            <div className="relative bg-gray-50 dark:bg-gray-700/50 rounded-xl border border-gray-200 dark:border-gray-600 p-3">
-              <textarea
-                value={inputMessage}
-                onChange={(e) => setInputMessage(e.target.value)}
-                placeholder="输入您的问题..."
-                className="w-full bg-transparent text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 resize-none focus:outline-none text-sm leading-relaxed"
-                rows={inputExpanded ? 6 : 2}
-                style={{
-                  maxHeight: inputExpanded ? '150px' : '60px',
-                  minHeight: '40px'
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && !e.shiftKey) {
-                    e.preventDefault();
-                    handleSendClick();
-                  }
-                }}
-              />
-              
-              {/* 底部工具栏 */}
-              <div className="flex items-center justify-between mt-2 pt-2">
-                <div className="flex items-center space-x-2">
-                  {/* 上传文件按钮 */}
-                  <label className="p-2 text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 cursor-pointer transition-colors rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600" title="上传文件">
-                    <input
-                      ref={fileInputRef}
-                      type="file"
-                      accept="image/*"
-                      multiple
-                      className="hidden"
-                      onChange={handleFileUpload}
-                    />
-                    <Paperclip size={16} />
-                  </label>
-                  
-                  {/* 联网按钮（待开发） */}
-                  <button
-                    className="p-2 text-gray-400 cursor-not-allowed rounded-lg" 
-                    title="联网功能（开发中）"
-                    disabled
-                  >
-                    <Globe size={16} />
-                  </button>
-                  
-                  {/* 新建对话按钮 */}
-                  <button
-                    onClick={() => {
-                      createNewSession();
-                    }}
-                    className="p-2 text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 transition-colors rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600"
-                    title="新建对话"
-                  >
-                    <Plus size={16} />
-                  </button>
-                  
-                  {/* 展开/收起按钮 */}
-                  <button
-                    onClick={() => setInputExpanded(!inputExpanded)}
-                    className="p-2 text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 transition-colors rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600"
-                    title={inputExpanded ? '收起' : '展开'}
-                  >
-                    {inputExpanded ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
-                  </button>
-                </div>
-                
-                {/* 发送按钮 */}
                 <button
-                  onClick={handleSendClick}
-                  disabled={(!inputMessage.trim() && selectedFiles.length === 0) || isLoading}
-                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2 text-sm transition-colors"
+                  onClick={() => handleRemoveFile(index)}
+                  className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full w-3 h-3 flex items-center justify-center text-xs opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-600"
+                  title="移除图片"
                 >
-                  <Send size={14} />
-                  <span>发送</span>
+                  ×
                 </button>
               </div>
-              
-              {/* 提示文字 */}
-              <div className="mt-2">
-                <span className="text-xs text-gray-400 dark:text-gray-500">
-                  Enter 发送，Shift+Enter 换行
-                </span>
-              </div>
-            </div>
+            ))}
           </div>
+        )}
 
-          {/* 拖拽手柄 */}
-          <div
-            className={`
-              absolute top-0 left-0 w-2 h-full cursor-col-resize group z-10
-              ${isResizing ? 'bg-blue-500/20' : 'hover:bg-blue-500/10'}
-              transition-colors duration-200
-            `}
-            onMouseDown={handleMouseDown}
-          >
-            <div className="absolute top-1/2 left-0 transform -translate-y-1/2 -translate-x-1/2">
-              <div className={`
-                w-1 h-12 rounded-full transition-all duration-200
-                ${isResizing 
-                  ? 'bg-blue-500 w-1.5' 
-                  : 'bg-gray-300 dark:bg-gray-600 group-hover:bg-blue-500 group-hover:w-1.5'
-                }
-              `}></div>
+        {/* 输入框 */}
+        <div className="relative bg-gray-50 dark:bg-gray-700/50 rounded-xl border border-gray-200 dark:border-gray-600 p-3 flex-1">
+          <textarea
+            value={inputMessage}
+            onChange={(e) => setInputMessage(e.target.value)}
+            placeholder="输入您的问题..."
+            className="w-full bg-transparent text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 resize-none focus:outline-none text-sm leading-relaxed"
+            rows={inputExpanded ? 8 : (hasModelStatus ? 1 : 2)}
+            style={{
+              maxHeight: inputExpanded ? '250px' : (hasModelStatus ? '50px' : '70px'),
+              minHeight: inputExpanded ? '250px' : (hasModelStatus ? '50px' : '60px')
+            }}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                handleSendClick();
+              }
+            }}
+          />
+          
+          {/* 底部工具栏 - 重新排列按钮布局 */}
+          <div className="flex items-center justify-between mt-2 pt-2">
+            <div className="flex items-center space-x-2">
+              {/* 提示文字移到左侧 */}
+              <span className="text-xs text-gray-400 dark:text-gray-500">
+                Enter 发送，Shift+Enter 换行
+              </span>
             </div>
             
-            {isResizing && (
-              <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2">
-                <div className="flex space-x-0.5">
-                  <div className="w-0.5 h-3 bg-blue-500 rounded-full opacity-60"></div>
-                  <div className="w-0.5 h-3 bg-blue-500 rounded-full opacity-80"></div>
-                  <div className="w-0.5 h-3 bg-blue-500 rounded-full opacity-60"></div>
-                </div>
-              </div>
-            )}
+            <div className="flex items-center space-x-1">
+              {/* 上传文件按钮 */}
+              <label className="p-1.5 text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 cursor-pointer transition-colors rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600" title="上传文件">
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  className="hidden"
+                  onChange={handleFileUpload}
+                />
+                <Paperclip size={14} />
+              </label>
+              
+              {/* 联网按钮 */}
+              <button
+                className={`p-1.5 transition-colors rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 ${
+                  !canUseWebSearch ? 'text-gray-400 cursor-not-allowed' : 
+                  isWebSearchEnabled ? 'text-blue-500 bg-blue-50 dark:bg-blue-900/20' : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'
+                }`}
+                title={!canUseWebSearch ? "请先配置智谱API密钥以使用网络搜索功能" : isWebSearchEnabled ? "关闭网络搜索" : "开启网络搜索"}
+                disabled={!canUseWebSearch}
+                onClick={() => {
+                  if (!canUseWebSearch) {
+                    toast.error('请先在设置中配置智谱API密钥以使用网络搜索功能');
+                    return;
+                  }
+                  setWebSearchEnabled(!isWebSearchEnabled);
+                  toast.success(isWebSearchEnabled ? '网络搜索已关闭' : '网络搜索已开启');
+                }}
+              >
+                <Globe size={14} />
+              </button>
+              
+              {/* 新建对话按钮 */}
+              <button
+                onClick={() => {
+                  createNewSession();
+                }}
+                className="p-1.5 text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 transition-colors rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600"
+                title="新建对话"
+              >
+                <Plus size={14} />
+              </button>
+              
+              {/* 展开/收起按钮 */}
+              <button
+                onClick={() => setInputExpanded(!inputExpanded)}
+                className="p-1.5 text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 transition-colors rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600"
+                title={inputExpanded ? '收起' : '展开'}
+              >
+                {inputExpanded ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
+              </button>
+              
+              {/* 发送按钮 */}
+              <button
+                onClick={handleSendClick}
+                disabled={(!inputMessage.trim() && selectedFiles.length === 0) || isLoading}
+                className="p-1.5 text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 transition-colors rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed"
+                title="发送"
+              >
+                <Send size={14} />
+              </button>
+            </div>
           </div>
         </div>
-      )}
+      </div>
     </div>
   );
 };

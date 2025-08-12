@@ -35,7 +35,7 @@ export const ModeSwitch: React.FC<ModeSwitchProps> = ({ onModeChange }) => {
           ${isTransitioning ? 'opacity-50 cursor-not-allowed' : ''}
         `}
       >
-        简单模式
+        单提示词模式
       </button>
       <button
         onClick={() => handleModeSwitch('advanced')}
@@ -49,7 +49,7 @@ export const ModeSwitch: React.FC<ModeSwitchProps> = ({ onModeChange }) => {
           ${isTransitioning ? 'opacity-50 cursor-not-allowed' : ''}
         `}
       >
-        高级模式
+        多提示词模式
       </button>
     </div>
   );

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import { useAppStore } from '@/store';
 import { Plus, Edit2, Trash2, Check, X, Download, Maximize2, Minimize2, ChevronDown, ChevronRight, Search } from 'lucide-react';
 
@@ -67,6 +67,11 @@ export const SystemPromptManager: React.FC = () => {
       ]
     },
   ];
+
+  // 使用useCallback包装事件处理函数，避免渲染期间状态更新
+  const handleToggleSystemPromptTheme = useCallback((themeId: string) => {
+    toggleSystemPromptTheme(themeId);
+  }, [toggleSystemPromptTheme]);
 
   // 搜索过滤
   const filteredThemes = systemPromptThemes.filter(theme =>
@@ -219,13 +224,13 @@ export const SystemPromptManager: React.FC = () => {
     URL.revokeObjectURL(url);
   };
 
-  const toggleDownloadSelection = (themeId: string) => {
+  const toggleDownloadSelection = useCallback((themeId: string) => {
     setSelectedForDownload(prev => 
       prev.includes(themeId) 
         ? prev.filter(id => id !== themeId)
         : [...prev, themeId]
     );
-  };
+  }, []);
 
   return (
     <div className="space-y-4">
@@ -254,7 +259,7 @@ export const SystemPromptManager: React.FC = () => {
                   {!isAdding && (
                     <button
                       onClick={() => setIsAdding(true)}
-                      className="px-1.5 py-0 text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition-colors"
+                      className="px-1.5 py-0 text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition-colors"
                       title="新增主题"
                     >
                       <Plus size={12} />
@@ -265,7 +270,7 @@ export const SystemPromptManager: React.FC = () => {
                   {systemPromptThemes.length > 0 && (
                     <button
                       onClick={handleOpenDownloadModal}
-                      className="px-1.5 py-0 text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition-colors"
+                      className="px-1.5 py-0 text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition-colors"
                       title="导出主题"
                     >
                       <Download size={12} />
@@ -312,7 +317,7 @@ export const SystemPromptManager: React.FC = () => {
 
       {/* 主题添加表单 */}
       {isAdding && (
-        <div className="p-3 border border-gray-200 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-800">
+        <div className="p-2 border border-gray-200 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-800">
           <div className="space-y-4">
             {/* 快速模板 */}
             <div>
@@ -340,7 +345,7 @@ export const SystemPromptManager: React.FC = () => {
                   value={newThemeName}
                   onChange={(e) => setNewThemeName(e.target.value)}
                   placeholder="如：翻译助手、代码审查..."
-                  className="w-full px-2 py-1.5 text-xs border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white rounded focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all placeholder-gray-400 dark:placeholder-gray-500"
+                  className="w-full px-2 py-1.5 text-xs border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white rounded focus:outline-none focus:ring-1 focus:ring-gray-400 dark:focus:ring-gray-500 transition-all placeholder-gray-400 dark:placeholder-gray-500"
                   maxLength={30}
                 />
               </div>
@@ -449,7 +454,7 @@ export const SystemPromptManager: React.FC = () => {
                   name="systemPromptTheme"
                   id={theme.id}
                   checked={isSelected}
-                  onChange={() => toggleSystemPromptTheme(theme.id)}
+                  onChange={() => handleToggleSystemPromptTheme(theme.id)}
                   className="h-3 w-3 text-blue-600 focus:ring-blue-500 border-gray-300 dark:border-gray-600 flex-shrink-0"
                 />
                 
@@ -512,7 +517,7 @@ export const SystemPromptManager: React.FC = () => {
                             updateSystemPromptTheme(theme.id, { name: e.target.value.trim() });
                           }
                         }}
-                        className="w-full px-2 py-1.5 text-xs border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
+                        className="w-full px-2 py-1.5 text-xs border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white rounded focus:outline-none focus:ring-1 focus:ring-gray-400 dark:focus:ring-gray-500"
                       />
                     </div>
                     <div>

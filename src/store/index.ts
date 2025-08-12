@@ -1,10 +1,11 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { AppState, ChatSession, Message, ModelResponse, AIProvider, PageMode, SystemPromptItem, SystemPromptTheme, SystemPromptVersion, Language, User, RegistrationStats } from '@/types';
+import { AppState, ChatSession, Message, ModelResponse, AIProvider, PageMode, SystemPromptItem, SystemPromptTheme, SystemPromptVersion, Language, User, RegistrationStats, CustomModel, ModelConfig } from '@/types';
 import { AVAILABLE_MODELS } from '@/lib/models';
 import { generateId } from '@/utils/helpers';
 import { getUserIdentity } from '@/utils/userIdentity';
 import * as cloudDB from '@/services/supabase-db-advanced';
+import { analytics } from '@/services/analytics';
 
 interface AppStore extends AppState {
   // 分离的会话状态
@@ -12,6 +13,18 @@ interface AppStore extends AppState {
   advancedCurrentSession: ChatSession | null;
   simpleIsLoading: boolean;
   advancedIsLoading: boolean;
+  
+  // 模型显示状态管理
+  displayedModels: string[];
+  setDisplayedModels: (modelIds: string[]) => void;
+  toggleModelDisplay: (modelId: string) => void;
+  getDisplayedModels: () => string[];
+  
+  // 自定义模型管理
+  customModels: CustomModel[];
+  addCustomModel: (model: CustomModel) => void;
+  deleteCustomModel: (modelId: string) => void;
+  getAllModels: () => (ModelConfig & { isCustom?: boolean })[];
   
   // 获取当前模式的会话和加载状态
   getCurrentSession: () => ChatSession | null;
@@ -106,11 +119,11 @@ interface AppStore extends AppState {
   setSidebarExpanded: (expanded: boolean) => void;
   setSidebarWidth: (width: number) => void;
   
-  // 简单模式布局设置
+  // 单提示词模式布局设置
   simpleLayoutMode: 'auto' | 'single' | 'double' | 'triple'; // 排列方式
   setSimpleLayoutMode: (mode: 'auto' | 'single' | 'double' | 'triple') => void;
   
-  // 高级模式导航状态
+  // 多提示词模式导航状态
   isAdvancedNavigationVisible: boolean;
   advancedNavigationPosition: { x: number; y: number };
   setAdvancedNavigationVisible: (visible: boolean) => void;
@@ -128,6 +141,10 @@ interface AppStore extends AppState {
   // 语言设置
   language: Language;
   setLanguage: (language: Language) => void;
+  
+  // 网络搜索功能
+  isWebSearchEnabled: boolean;
+  setWebSearchEnabled: (enabled: boolean) => void;
   
   // 用户认证
   currentUser: any; // 兼容旧的用户类型和新的User类型
@@ -153,11 +170,14 @@ export const useAppStore = create<AppStore>()(
         volcengine: '',
         kimi: '',
         claude: '',
+        bigmodel: '',
       },
       availableModels: AVAILABLE_MODELS,
       selectedModels: [], // 不默认勾选任何模型，这个字段为了向后兼容保留
-      simpleSelectedModels: [], // 简单模式选择的模型
-      advancedSelectedModels: [], // 高级模式选择的模型
+      simpleSelectedModels: [], // 单提示词模式选择的模型
+      advancedSelectedModels: [], // 多提示词模式选择的模型
+      displayedModels: AVAILABLE_MODELS.map(m => m.id), // 默认显示所有模型
+      customModels: [], // 自定义模型列表
       modelParameters: {}, // 模型参数设置
       currentSession: null,
       simpleCurrentSession: null,
@@ -182,10 +202,10 @@ export const useAppStore = create<AppStore>()(
       isSidebarExpanded: true,
       sidebarWidth: 224, // 默认展开宽度（w-56 = 224px）
       
-      // 简单模式布局设置
+      // 单提示词模式布局设置
       simpleLayoutMode: 'auto', // 默认自动排列
       
-      // 高级模式导航状态
+      // 多提示词模式导航状态
       isAdvancedNavigationVisible: true,
       advancedNavigationPosition: { x: typeof window !== 'undefined' ? window.innerWidth - 100 : 800, y: typeof window !== 'undefined' ? window.innerHeight / 2 : 400 },
       
@@ -196,6 +216,9 @@ export const useAppStore = create<AppStore>()(
       
       // 语言设置
       language: 'zh' as Language,
+      
+      // 网络搜索功能
+      isWebSearchEnabled: false,
       
       // 用户认证
       isAuthenticated: false,
@@ -504,6 +527,7 @@ export const useAppStore = create<AppStore>()(
               total_messages: 0,
               preferences: {},
               created_at: new Date().toISOString(),
+              updated_at: new Date().toISOString(),
               last_active: new Date().toISOString(),
             });
             console.log('✅ 新用户已创建:', user.id);
@@ -517,10 +541,13 @@ export const useAppStore = create<AppStore>()(
           
           set({ currentUser: user, cloudSyncStatus: 'idle' });
           
-          // 自动同步云端数据
-          setTimeout(() => {
-            get().syncFromCloud();
-          }, 1000);
+          // 延迟同步云端数据，避免在渲染期间触发状态更新
+          // 使用 queueMicrotask 来确保在下一个事件循环中执行
+          queueMicrotask(() => {
+            setTimeout(() => {
+              get().syncFromCloud();
+            }, 1000);
+          });
           
         } catch (error) {
           console.error('❌ 数据库用户初始化失败，使用本地模式:', error);
@@ -563,6 +590,81 @@ export const useAppStore = create<AppStore>()(
         return state.pageMode === 'advanced' ? state.advancedSelectedModels : state.simpleSelectedModels;
       },
 
+      // 模型显示状态管理
+      getDisplayedModels: () => {
+        return get().displayedModels;
+      },
+
+      setDisplayedModels: (modelIds) => {
+        set({ displayedModels: [...new Set(modelIds)] });
+      },
+
+      toggleModelDisplay: (modelId) => {
+        set((state) => {
+          const isDisplayed = state.displayedModels.includes(modelId);
+          if (isDisplayed) {
+            return {
+              displayedModels: state.displayedModels.filter(id => id !== modelId)
+            };
+          } else {
+            return {
+              displayedModels: [...state.displayedModels, modelId]
+            };
+          }
+        });
+      },
+
+      // 自定义模型管理
+      addCustomModel: (model) => {
+        set((state) => ({
+          customModels: [...state.customModels, model],
+          displayedModels: [...state.displayedModels, model.id] // 自动显示新添加的模型
+        }));
+      },
+
+      deleteCustomModel: (modelId) => {
+        set((state) => {
+          const newCustomModels = state.customModels.filter(m => m.id !== modelId);
+          const newDisplayedModels = state.displayedModels.filter(id => id !== modelId);
+          
+          // 如果模型已选中，取消选中
+          const newSimpleSelectedModels = state.simpleSelectedModels.filter(id => id !== modelId);
+          const newAdvancedSelectedModels = state.advancedSelectedModels.filter(id => id !== modelId);
+          const newSelectedModels = state.selectedModels.filter(id => id !== modelId);
+          
+          return {
+            customModels: newCustomModels,
+            displayedModels: newDisplayedModels,
+            simpleSelectedModels: newSimpleSelectedModels,
+            advancedSelectedModels: newAdvancedSelectedModels,
+            selectedModels: newSelectedModels
+          };
+        });
+      },
+
+      getAllModels: () => {
+        const state = get();
+        const allModels: (ModelConfig & { isCustom?: boolean })[] = [...state.availableModels];
+        
+        // 添加自定义模型
+        state.customModels.forEach(customModel => {
+          allModels.push({
+            id: customModel.id,
+            name: customModel.name,
+            provider: customModel.provider as AIProvider,
+            modelId: customModel.modelId,
+            description: customModel.description,
+            maxTokens: 4000,
+            temperature: 0.7,
+            supportVision: false,
+            costPerToken: 0,
+            isCustom: true
+          });
+        });
+        
+        return allModels;
+      },
+
       // 模型选择操作 - 根据当前模式操作对应的状态
       toggleModel: (modelId) => {
         set((state) => {
@@ -573,7 +675,7 @@ export const useAppStore = create<AppStore>()(
           if (isSelected) {
             newSelectedModels = currentModels.filter(id => id !== modelId);
           } else {
-            // 在高级模式下限制最多3个模型
+            // 在多提示词模式下限制最多3个模型
             if (state.pageMode === 'advanced' && currentModels.length >= 3) {
               return state; // 已达到最大限制
             }
@@ -582,8 +684,22 @@ export const useAppStore = create<AppStore>()(
           
           // 清理重复的模型ID和无效的模型ID
           const cleanedModels = [...new Set(newSelectedModels)].filter(id => 
-            state.availableModels.some(model => model.id === id)
+            state.availableModels.some(model => model.id === id) || 
+            state.customModels.some(model => model.id === id)
           );
+          
+          // 记录模型选择事件
+          const model = [...state.availableModels, ...state.customModels].find(m => m.id === modelId);
+          if (model) {
+            analytics.userAction('model_selected', {
+              model_id: modelId,
+              model_name: model.name || modelId,
+              provider: model.provider,
+              action: isSelected ? 'deselected' : 'selected',
+              mode: state.pageMode,
+              total_selected: cleanedModels.length
+            }).catch(console.warn);
+          }
           
           // 更新对应模式的状态
           if (state.pageMode === 'advanced') {
@@ -604,7 +720,8 @@ export const useAppStore = create<AppStore>()(
         set((state) => {
           // 清理重复的模型ID和无效的模型ID
           const cleanedModels = [...new Set(modelIds)].filter(id => 
-            state.availableModels.some(model => model.id === id)
+            state.availableModels.some(model => model.id === id) || 
+            state.customModels.some(model => model.id === id)
           );
           
           // 根据当前模式更新对应的状态
@@ -625,7 +742,8 @@ export const useAppStore = create<AppStore>()(
       setSimpleSelectedModels: (modelIds) => {
         set((state) => {
           const cleanedModels = [...new Set(modelIds)].filter(id => 
-            state.availableModels.some(model => model.id === id)
+            state.availableModels.some(model => model.id === id) || 
+            state.customModels.some(model => model.id === id)
           );
           
           return { 
@@ -637,10 +755,11 @@ export const useAppStore = create<AppStore>()(
 
       setAdvancedSelectedModels: (modelIds) => {
         set((state) => {
-          // 在高级模式下限制最多3个模型
+          // 在多提示词模式下限制最多3个模型
           const limitedModels = modelIds.slice(0, 3);
           const cleanedModels = [...new Set(limitedModels)].filter(id => 
-            state.availableModels.some(model => model.id === id)
+            state.availableModels.some(model => model.id === id) || 
+            state.customModels.some(model => model.id === id)
           );
           
           return { 
@@ -654,10 +773,17 @@ export const useAppStore = create<AppStore>()(
       cleanupSelectedModels: () => {
         set((state) => {
           const validModels = [...new Set(state.selectedModels)].filter(id => 
-            state.availableModels.some(model => model.id === id)
+            state.availableModels.some(model => model.id === id) || 
+            state.customModels.some(model => model.id === id)
           );
           
-          return { selectedModels: validModels };
+          // 只有在实际需要清理时才更新状态
+          if (validModels.length !== state.selectedModels.length || 
+              !validModels.every(id => state.selectedModels.includes(id))) {
+            return { selectedModels: validModels };
+          }
+          
+          return state; // 没有变化时返回原状态
         });
       },
 
@@ -711,6 +837,15 @@ export const useAppStore = create<AppStore>()(
           temperature: 0.7,
           maxTokens: 4096,
         };
+
+        // 记录会话创建事件
+        analytics.userAction('session_created', {
+          session_id: newSession.id,
+          mode: state.pageMode,
+          selected_models: currentSelectedModels,
+          model_count: currentSelectedModels.length,
+          has_system_prompt: !!state.systemPrompt
+        }).catch(console.warn);
 
         set((currentState) => {
           const updates: any = {
@@ -1276,7 +1411,7 @@ export const useAppStore = create<AppStore>()(
         set({ simpleLayoutMode: mode });
       },
       
-      // 高级模式导航状态设置
+      // 多提示词模式导航状态设置
       setAdvancedNavigationVisible: (visible: boolean) => {
         set({ isAdvancedNavigationVisible: visible });
       },
@@ -1288,6 +1423,11 @@ export const useAppStore = create<AppStore>()(
       // 语言设置
       setLanguage: (language: Language) => {
         set({ language });
+      },
+      
+      // 网络搜索功能
+      setWebSearchEnabled: (enabled: boolean) => {
+        set({ isWebSearchEnabled: enabled });
       },
       
       // 右侧边栏方法
@@ -1430,6 +1570,7 @@ export const useAppStore = create<AppStore>()(
         currentUser: state.currentUser,
         isDarkMode: state.isDarkMode,
         pageMode: state.pageMode,
+        currentSession: state.currentSession,
         simpleSelectedModels: state.simpleSelectedModels,
         advancedSelectedModels: state.advancedSelectedModels,
         simpleCurrentSession: state.simpleCurrentSession,
@@ -1444,6 +1585,9 @@ export const useAppStore = create<AppStore>()(
         simpleLayoutMode: state.simpleLayoutMode,
         language: state.language,
         isAuthenticated: state.isAuthenticated,
+        customModels: state.customModels,
+        displayedModels: state.displayedModels,
+        isWebSearchEnabled: state.isWebSearchEnabled,
       }),
     }
   )

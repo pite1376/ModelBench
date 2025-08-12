@@ -9,6 +9,7 @@ export interface User {
   user_type: 'anonymous' | 'registered';
   email_verified: boolean;
   created_at: string;
+  updated_at: string;
   last_active: string;
   total_sessions: number;
   total_messages: number;
@@ -95,4 +96,4 @@ export interface UserSubscription {
   monthly_message_used: number;
   features: any[];
   created_at: string;
-} 
+}

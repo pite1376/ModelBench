@@ -1,10 +1,12 @@
 import React, { memo, useState } from 'react';
 import { ChatSession, ModelResponse } from '@/types';
 import { AVAILABLE_MODELS } from '@/lib/models';
+import { useAppStore } from '@/store';
 import { formatTokens, formatCost, copyToClipboard } from '@/utils/helpers';
 import { Copy, Check, AlertCircle, Loader, Zap } from 'lucide-react';
 import TypewriterEffect from '../TypewriterEffect';
 import ReasoningDisplay from '../ReasoningDisplay';
+import { formatTokenAndCost } from '@/utils/modelPricing';
 
 interface ModelResponseGridProps {
   session: ChatSession;
@@ -19,7 +21,8 @@ interface ModelCardProps {
 
 const ModelCard = memo<ModelCardProps>(({ modelId, response, messageId }) => {
   const [copied, setCopied] = useState(false);
-  const model = AVAILABLE_MODELS.find(m => m.id === modelId);
+  const { getAllModels } = useAppStore();
+  const model = getAllModels().find(m => m.id === modelId);
   
   if (!model) return null;
 
@@ -56,7 +59,13 @@ const ModelCard = memo<ModelCardProps>(({ modelId, response, messageId }) => {
             model.provider === 'aliyun' ? 'orange' : 
             model.provider === 'volcengine' ? 'purple' :
             model.provider === 'kimi' ? 'green' : 'gray'}-500`}></div>
-          <h3 className="font-medium text-sm text-gray-800">{model.name}</h3>
+          <div className="flex items-center space-x-1">
+            <h3 className="font-medium text-sm text-gray-800">{model.name}</h3>
+            {/* Token和费用显示 */}
+            <span className="text-xs text-gray-500 dark:text-gray-400">
+              | {formatTokenAndCost(model.name, response?.usage)}
+            </span>
+          </div>
           {model.isReasoner && (
             <Zap size={12} className="text-purple-500" />
           )}
@@ -154,7 +163,10 @@ export const ModelResponseGrid: React.FC<ModelResponseGridProps> = memo(({ sessi
   if (!lastUserMessage) return null;
 
   const messageId = lastUserMessage.id;
-  const responses = session.responses[messageId] || {};
+  // 修复数据结构访问：responses[modelId][messageId] 而不是 responses[messageId][modelId]
+  const getModelResponse = (modelId: string) => {
+    return session.responses?.[modelId]?.[messageId];
+  };
 
   return (
     <div className="border-t border-gray-200 bg-gray-50 p-4">
@@ -168,7 +180,7 @@ export const ModelResponseGrid: React.FC<ModelResponseGridProps> = memo(({ sessi
           <ModelCard
             key={modelId}
             modelId={modelId}
-            response={responses[modelId]}
+            response={getModelResponse(modelId)}
             messageId={messageId}
           />
         ))}
@@ -177,4 +189,4 @@ export const ModelResponseGrid: React.FC<ModelResponseGridProps> = memo(({ sessi
   );
 });
 
-ModelResponseGrid.displayName = 'ModelResponseGrid'; 
+ModelResponseGrid.displayName = 'ModelResponseGrid';
