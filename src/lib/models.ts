@@ -619,7 +619,7 @@ export const PROVIDERS: Record<AIProvider, { id: AIProvider; name: string; apiUr
     apiUrl: 'https://open.bigmodel.cn/api/paas/v4',
     icon: '🧠',
     color: '#1E88E5',
-    logo: '/LLMBench/assets/bigmodel.png',
+    logo: '/LLMBench/src/lib/model-logo/bigmodel.png',
     supportStream: true,
   },
 };
