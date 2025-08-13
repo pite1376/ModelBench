@@ -1,7 +1,6 @@
 # TODO:
 
-- [x] 16: 运行npm run build构建项目生成dist文件夹 (priority: High)
-- [x] 17: 检查构建后的资源文件名是否与请求的文件名匹配 (priority: High)
-- [x] 18: 验证vite.config.ts配置是否正确 (priority: High)
-- [x] 19: 检查GitHub Actions部署流程配置 (priority: High)
-- [x] 20: 提交并推送构建产物到GitHub触发重新部署 (priority: High)
+- [x] 21: 修改vite.config.ts中的base路径从'/ModelBench/'改为'/LLMBench/' (priority: High)
+- [x] 22: 重新构建项目生成正确的资源文件 (priority: High)
+- [ ] 23: 提交并推送更改到GitHub触发重新部署 (**IN PROGRESS**) (priority: High)
+- [ ] 24: 验证GitHub Pages访问地址变为https://pite1376.github.io/LLMBench/ (priority: Medium)
