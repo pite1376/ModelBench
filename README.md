@@ -55,8 +55,8 @@
 
 ```bash
 # 克隆项目
-git clone https://github.com/pite1376/LLMBench.git
-cd LLMBench
+git clone https://github.com/pite1376/model-test-html.github.io.git
+cd model-test-html.github.io
 
 # 安装依赖
 npm install
@@ -145,8 +145,8 @@ MIT License
 
 ## 🔗 相关链接
 
-- [在线演示](https://pite1376.github.io/LLMBench/)
-- [GitHub仓库](https://github.com/pite1376/LLMBench)
+- [在线演示](https://pite1376.github.io/model-test-html.github.io/)
+- [GitHub仓库](https://github.com/pite1376/model-test-html.github.io)
 
 ---
 

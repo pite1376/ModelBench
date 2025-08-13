@@ -62,7 +62,7 @@ ${systemPrompt}`;
       const response = await service.sendMessage({
         model: 'glm-4.5',
         messages: [{ 
-          id: 'temp-' + Date.now(),
+          id: 'temp-optimization-' + Date.now(),
           role: 'user', 
           content: optimizationPrompt,
           timestamp: new Date()

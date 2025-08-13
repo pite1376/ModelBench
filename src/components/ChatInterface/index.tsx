@@ -36,7 +36,7 @@ export const ChatInterface: React.FC = () => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   
   // 报告生成模态框状态
-  // const [isReportModalOpen, setIsReportModalOpen] = useState(false);
+  const [isReportModalOpen, setIsReportModalOpen] = useState(false);
 
   // 性能监控
   usePerformanceMonitor('ChatInterface');
@@ -198,61 +198,24 @@ export const ChatInterface: React.FC = () => {
   };
 
   // 处理生成报告
-  // const handleGenerateReport = () => {
-  //   if (currentSession && currentSession.messages.length > 0) {
-  //     setIsReportModalOpen(true);
-  //   }
-  // };
+  const handleGenerateReport = () => {
+    if (currentSession && currentSession.messages.length > 0) {
+      // setIsReportModalOpen(true);
+      toast.info('报告功能暂时不可用');
+    }
+  };
 
   // 处理报告保存
-  // const handleSaveReport = (report: any) => {
-  //   try {
-  //     const reportId = saveReport({
-  //       title: report.title || `AI模型对比报告 - ${new Date().toLocaleDateString()}`,
-  //       htmlContent: report.htmlContent,
-  //       sessionData: currentSession
-  //     });
-  //     
-  //     toast.success('报告保存成功！', {
-  //       description: `报告ID: ${reportId}`
-  //     });
-  //     
-  //     logger.info('Report saved successfully', { reportId, sessionId: currentSession?.id });
-  //   } catch (error) {
-  //     const errorMessage = error instanceof Error ? error.message : '保存失败';
-  //     toast.error('保存报告失败', {
-  //       description: errorMessage
-  //     });
-  //     
-  //     logger.error('Failed to save report', error);
-  //   }
-  // };
+  const handleSaveReport = (report: any) => {
+    // 报告功能暂时禁用
+    toast.info('报告保存功能暂时不可用');
+  };
 
   // 处理报告导出
-  // const handleExportReport = (report: any) => {
-  //   try {
-  //     // 创建临时报告ID用于导出
-  //     const tempReportId = saveReport({
-  //       title: report.title || `AI模型对比报告 - ${new Date().toLocaleDateString()}`,
-  //       htmlContent: report.htmlContent,
-  //       sessionData: currentSession
-  //     });
-  //     
-  //     // 导出HTML文件
-  //     exportReportAsHTML(tempReportId);
-  //     
-  //     toast.success('报告导出成功！');
-  //     
-  //     logger.info('Report exported successfully', { sessionId: currentSession?.id });
-  //   } catch (error) {
-  //     const errorMessage = error instanceof Error ? error.message : '导出失败';
-  //     toast.error('导出报告失败', {
-  //       description: errorMessage
-  //     });
-  //     
-  //     logger.error('Failed to export report', error);
-  //   }
-  // };
+  const handleExportReport = (report: any) => {
+    // 报告功能暂时禁用
+    toast.info('报告导出功能暂时不可用');
+  };
 
   const fileToBase64 = (file: File): Promise<string> => {
     return new Promise((resolve, reject) => {
@@ -310,7 +273,7 @@ export const ChatInterface: React.FC = () => {
           onFileSelect={handleFileSelect}
           selectedFiles={selectedFiles}
           onRemoveFile={removeFile}
-          // onGenerateReport={handleGenerateReport}
+          onGenerateReport={handleGenerateReport}
           isLoading={isLoading}
           disabled={selectedModels.length === 0}
           fileInputRef={fileInputRef}
@@ -320,7 +283,7 @@ export const ChatInterface: React.FC = () => {
         {/* 底部滚动锚点 */}
         <div ref={messageEndRef} />
         
-        {/* 报告生成模态框 */}
+        {/* 报告生成模态框 - 暂时禁用 */}
         {/* <ReportGenerationModal
           isOpen={isReportModalOpen}
           onClose={() => setIsReportModalOpen(false)}

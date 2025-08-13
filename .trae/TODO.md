@@ -1,8 +1,7 @@
 # TODO:
 
-- [x] create_public_folder: 创建public文件夹 (priority: High)
-- [x] create_modelbench_logo: 创建modelbench-logo.svg文件 (priority: High)
-- [x] create_favicon_files: 创建favicon相关文件(favicon-96x96.png, favicon.ico, apple-touch-icon.png) (priority: High)
-- [x] create_webmanifest: 创建site.webmanifest文件 (priority: High)
-- [x] fix_index_html_paths: 修复index.html中的静态资源路径，使其与GitHub Pages的base路径兼容 (priority: High)
-- [ ] test_build_and_deploy: 测试构建并重新部署到GitHub Pages (**IN PROGRESS**) (priority: Medium)
+- [x] 1: 修改.gitignore文件，移除对public文件夹的忽略，确保图片资源可以被提交 (priority: High)
+- [x] 2: 检查并确认vite.config.ts中的base路径配置正确 (priority: High)
+- [x] 4: 构建项目并测试本地预览 (priority: High)
+- [x] 3: 验证package.json中的homepage和部署脚本配置 (priority: Medium)
+- [x] 5: 提供GitHub部署指南和操作步骤 (priority: Medium)

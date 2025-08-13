@@ -574,7 +574,7 @@ export const PROVIDERS: Record<AIProvider, { id: AIProvider; name: string; apiUr
     apiUrl: 'https://api.deepseek.com',
     icon: '🐟',
     color: '#1E40AF',
-    logo: '/LLMBench/src/lib/model-logo/deepseek-logo.png',
+    logo: '/src/lib/model-logo/deepseek-logo.png',
     supportStream: true,  
   },
   aliyun: {
@@ -583,7 +583,7 @@ export const PROVIDERS: Record<AIProvider, { id: AIProvider; name: string; apiUr
     apiUrl: 'https://dashscope.aliyuncs.com/api/v1',
     icon: '☁️',
     color: '#FF6600',
-    logo: '/LLMBench/src/lib/model-logo/qwen-logo.png',
+    logo: '/src/lib/model-logo/qwen-logo.png',
     supportStream: true,
   },
   volcengine: {
@@ -592,7 +592,7 @@ export const PROVIDERS: Record<AIProvider, { id: AIProvider; name: string; apiUr
     apiUrl: 'https://ark.cn-beijing.volces.com/api/v3',
     icon: '🌋',
     color: '#1890FF',
-    logo: '/LLMBench/src/lib/model-logo/doubao_logo.png',
+    logo: '/src/lib/model-logo/doubao_logo.png',
     supportStream: true,
   },
   kimi: {
@@ -601,7 +601,7 @@ export const PROVIDERS: Record<AIProvider, { id: AIProvider; name: string; apiUr
     apiUrl: 'https://api.moonshot.cn',
     icon: '🌙',
     color: '#6366F1',
-    logo: '/LLMBench/src/lib/model-logo/kimi-logo.png',
+    logo: '/kimi-logo.png',
     supportStream: true,
   },
   claude: {
@@ -610,7 +610,7 @@ export const PROVIDERS: Record<AIProvider, { id: AIProvider; name: string; apiUr
     apiUrl: 'https://api.302ai.cn/v1',
     icon: '✨',
     color: '#6A0DAD',
-    logo: '/LLMBench/src/lib/model-logo/claude-logo.png',
+    logo: '/claude-logo.png',
     supportStream: true,
   },
   bigmodel: {
@@ -619,7 +619,7 @@ export const PROVIDERS: Record<AIProvider, { id: AIProvider; name: string; apiUr
     apiUrl: 'https://open.bigmodel.cn/api/paas/v4',
     icon: '🧠',
     color: '#1E88E5',
-    logo: '/LLMBench/src/lib/model-logo/bigmodel.png',
+    logo: '/bigmodel.png',
     supportStream: true,
   },
 };

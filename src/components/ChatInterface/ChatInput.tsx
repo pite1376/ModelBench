@@ -22,11 +22,9 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   onFileSelect,
   selectedFiles,
   onRemoveFile,
-  onGenerateReport,
   isLoading,
   disabled,
-  fileInputRef,
-  hasMessages
+  fileInputRef
 }) => {
   const handleKeyPress = (e: KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {

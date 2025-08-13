@@ -1,9 +1,9 @@
 {
-  "name": "llmbench",
+  "name": "model-test-html.github.io",
   "private": true,
   "version": "0.1.0",
   "type": "module",
-  "homepage": "https://pite1376.github.io/LLMBench/",
+  "homepage": "https://pite1376.github.io/ModelBench/",
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
