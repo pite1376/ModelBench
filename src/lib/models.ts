@@ -574,7 +574,7 @@ export const PROVIDERS: Record<AIProvider, { id: AIProvider; name: string; apiUr
     apiUrl: 'https://api.deepseek.com',
     icon: '🐟',
     color: '#1E40AF',
-    logo: '/src/lib/model-logo/deepseek-logo.png',
+    logo: '/claude-logo.png', // 使用现有的claude-logo.png作为临时替代
     supportStream: true,  
   },
   aliyun: {
@@ -583,7 +583,7 @@ export const PROVIDERS: Record<AIProvider, { id: AIProvider; name: string; apiUr
     apiUrl: 'https://dashscope.aliyuncs.com/api/v1',
     icon: '☁️',
     color: '#FF6600',
-    logo: '/src/lib/model-logo/qwen-logo.png',
+    logo: '/gpt-logo.png', // 使用现有的gpt-logo.png作为临时替代
     supportStream: true,
   },
   volcengine: {
@@ -592,7 +592,7 @@ export const PROVIDERS: Record<AIProvider, { id: AIProvider; name: string; apiUr
     apiUrl: 'https://ark.cn-beijing.volces.com/api/v3',
     icon: '🌋',
     color: '#1890FF',
-    logo: '/src/lib/model-logo/doubao_logo.png',
+    logo: '/bigmodel.png', // 使用现有的bigmodel.png作为临时替代
     supportStream: true,
   },
   kimi: {
