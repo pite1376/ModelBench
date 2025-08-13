@@ -1,6 +1,7 @@
 # TODO:
 
-- [x] 12: 运行npm run build重新构建项目 (priority: High)
-- [x] 13: 检查构建后的资源文件名是否正确 (priority: High)
-- [x] 15: 提交并推送更改到GitHub触发重新部署 (priority: High)
-- [x] 14: 验证public文件夹中的图片资源是否正确复制到dist (priority: Medium)
+- [x] 16: 运行npm run build构建项目生成dist文件夹 (priority: High)
+- [x] 17: 检查构建后的资源文件名是否与请求的文件名匹配 (priority: High)
+- [x] 18: 验证vite.config.ts配置是否正确 (priority: High)
+- [x] 19: 检查GitHub Actions部署流程配置 (priority: High)
+- [ ] 20: 提交并推送构建产物到GitHub触发重新部署 (**IN PROGRESS**) (priority: High)
