@@ -5,26 +5,26 @@ export const AVAILABLE_MODELS: ModelConfig[] = [
   // DeepSeek 模型
   {
     id: 'deepseek-chat',
-    name: 'DeepSeek V3 0324',
+    name: 'DeepSeek-V3.1',
     provider: 'deepseek',
     modelId: 'deepseek-chat',
-    maxTokens: 64000,
+    maxTokens: 8000,
     temperature: 0.7,
     supportVision: false,
-    costPerToken: 0.0000014, // 1.4美元/1M tokens
-    description: 'DeepSeek V3-250325 是通用型 MoE 模型的标杆，通过后训练优化实现多领域能力跃升，尤其适合开发者与普通用户的高效需求。追求广度与效率平衡，适合日常高并发场景。发布日期：2025 年 3 月 24 日。API 提供 64K 上下文',
+    costPerToken: 0.000012, // 12元/1M tokens
+    description: 'DeepSeek-V3.1 是一个支持思考模式和非思考模式的混合模型，更智能的工具调用、更高思考效率',
   },
   {
     id: 'deepseek-reasoner',
-    name: 'DeepSeek R1 0528',
+    name: 'DeepSeek-V3.1（思考模式）',
     provider: 'deepseek',
     modelId: 'deepseek-reasoner',
-    maxTokens: 32000,
+    maxTokens: 64000,
     temperature: 0.7,
     supportVision: false,
-    costPerToken: 0.000055, // 55美元/1M tokens
+    costPerToken: 0.000012, // 12元/1M tokens
     isReasoner: true,
-    description: 'DeepSeek R1-250528 代表推理专用模型的演进，依托强化学习突破复杂任务瓶颈，为科研、金融等专业领域提供核心支持。R1 专注深度与精确性，为专业分析场景而生。发布日期：2025 年 5 月 28 日。max_tokens用于限制模型单次输出的总长度（包括思考过程），默认为 32K，最大为 64K',
+    description: 'DeepSeek-V3.1 是一个支持思考模式和非思考模式的混合模型，更智能的工具调用、更高思考效率',
   },
 
   // 阿里云通义千问模型
@@ -364,100 +364,154 @@ export const AVAILABLE_MODELS: ModelConfig[] = [
     name: 'Claude Sonnet 4.1',
     provider: 'claude',
     modelId: 'claude-opus-4-1-20250805',
-    maxTokens: 4096,
+    maxTokens: 32000,
     temperature: 0.7,
-    supportVision: false,
-    costPerToken: 0.000003, // Placeholder cost, please verify from 302.AI pricing
+    supportVision: true,
+    costPerToken: 0.0006, // Placeholder cost, please verify from 302.AI pricing
+    description: 'Anthropic当前最强大、最智能的模型，Claude Opus 4.1被定位为编码和复杂AI代理任务的行业领导者。它是Claude Opus 4的直接升级版，在代理任务、真实世界编码和推理能力上均有显著提升 。该模型在处理长程任务时表现出色，能够持续数小时解决复杂问题，并在SWE-bench Verified编码基准测试中取得了74.5%的成绩 。',
   },
   {
     id: 'claude-sonnet-4-20250514',
     name: 'Claude Sonnet 4',
     provider: 'claude',
     modelId: 'claude-sonnet-4-20250514',
-    maxTokens: 4096,
+    maxTokens: 64000,
     temperature: 0.7,
-    supportVision: false,
-    costPerToken: 0.000003, // Placeholder cost, please verify from 302.AI pricing
+    supportVision: true,
+    costPerToken: 0.000115, // Placeholder cost, please verify from 302.AI pricing
+    description: 'Claude Sonnet 4 是Anthropic于2025年5月23日推出的通用型大语言模型，支持100万tokens上下文窗口，可处理75,000行代码或大量文档。具备混合推理架构（快速模式+扩展思考模式），支持多模态输入。在SWE-bench测试中达72.7%准确率。适用于代码分析、文档综合和上下文感知代理等场景。',
   },
   {
     id: 'claude-opus-4-20250514',
     name: 'Claude Opus 4',
     provider: 'claude',
     modelId: 'claude-opus-4-20250514',
-    maxTokens: 4096,
+    maxTokens: 32000,
     temperature: 0.7,
-    supportVision: false,
-    costPerToken: 0.000003,
+    supportVision: true,
+    costPerToken: 0.0006,
+    description: 'Claude Opus 4是Anthropic的旗舰模型，专注于复杂推理和长程任务处理。在SWE-bench上达到72.5%的代码准确率，支持多步自主任务执行，适用于企业级AI代理和工作流自动化。',
   },
   {
     id: 'claude-3-7-sonnet-20250219',
     name: 'Claude Sonnet 3.7',
     provider: 'claude',
     modelId: 'claude-3-7-sonnet-20250219',
-    maxTokens: 4096,
+    maxTokens: 128000,
+    temperature: 0.7,
+    supportVision: false,
+    costPerToken: 0.000115, // Placeholder cost, please verify from 302.AI pricing
+    description: 'Anthropic首个混合推理模型，在编码和前端开发方面表现突出，支持扩展思考模式。在SWE-bench上取得70.3%的高分，适用于软件工程任务。',
+  },
+  {
+    id: 'gpt-5-chat-latest',
+    name: 'GPT-5',
+    provider: 'claude',
+    modelId: 'gpt-5-chat-latest',
+    maxTokens: 128000,
+    temperature: 0.7,
+    supportVision: false,
+    costPerToken: 0.00007, // Placeholder cost, please verify from 302.AI pricing
+    description: '最先进的跨行业编码与智能体任务模型。采用统一调度系统，内建“快速应答”和“深度思考”双模型，由路由器智能分配任务，适用于复杂推理和企业级工作流。简化模型选择流程，优化多场景响应效率。OpenAI于2025年8月发布的最新旗舰模型，支持文本、图像和视频输入。',
+  },
+  {
+    id: 'gpt-5-mini',
+    name: 'GPT-5 mini',
+    provider: 'claude',
+    modelId: 'gpt-5-mini',
+    maxTokens: 128000,
     temperature: 0.7,
     supportVision: false,
     costPerToken: 0.000003, // Placeholder cost, please verify from 302.AI pricing
+    description: '适用于明确任务的更快速、更实惠 GPT-5 版本',
+  },
+  {
+    id: 'gpt-5-nano',
+    name: 'GPT-5-nano',
+    provider: 'claude',
+    modelId: 'gpt-5-nano',
+    maxTokens: 128000,
+    temperature: 0.7,
+    supportVision: false,
+    costPerToken: 0.000015, // Placeholder cost, please verify from 302.AI pricing
+    description: '适用于摘要生成与分类任务的最快速、最实惠 GPT-5 版本',
   },
   {
     id: 'chatgpt-4o-latest',
     name: 'GPT-4o-latest',
     provider: 'claude',
     modelId: 'chatgpt-4o-latest',
-    maxTokens: 4096,
+    maxTokens: 128000,
     temperature: 0.7,
     supportVision: false,
     costPerToken: 0.000003, // Placeholder cost, please verify from 302.AI pricing
+    description: 'GPT-4o是OpenAI的旗舰级多模态模型，名称中的“o”代表“omni”（全能），意指其能够原生处理和生成文本、图像和音频 。它被定位为除专业的“o系列”推理模型之外，适用于绝大多数任务的最佳选择 。',
   },
   {
     id: 'o4-mini-deep-research',
     name: 'O4 Mini Deep Research',
     provider: 'claude',
     modelId: 'o4-mini-deep-research',
-    maxTokens: 4096,
+    maxTokens: 32000,
     temperature: 0.7,
     supportVision: false,
     costPerToken: 0.000003,
+    description: '',
   },
   {
     id: 'o3-deep-research',
     name: 'GPT O3 Deep Research',
     provider: 'claude',
     modelId: 'o3-deep-research',
-    maxTokens: 4096,
+    maxTokens: 32000,
     temperature: 0.7,
     supportVision: false,
     costPerToken: 0.000003,
+    description: '',
+  },
+  {
+    id: 'o3-pro',
+    name: 'GPT o3 pro',
+    provider: 'claude',
+    modelId: 'o3-pro',
+    maxTokens: 32000,
+    temperature: 0.7,
+    supportVision: false,
+    costPerToken: 0.0006,
+    description: '',
   },
   {
     id: 'gpt-4-plus',
     name: 'GPT-4 Plus',
     provider: 'claude',
     modelId: 'gpt-4-plus',
-    maxTokens: 4096,
+    maxTokens: 32000,
     temperature: 0.7,
     supportVision: false,
     costPerToken: 0.000003,
+    description: 'gpt-4-plus模型源于ChatGPT Plus，支持联网、图片生成、图片等文件内容分析、Python工具调用。',
   },
   {
     id: 'gemini-2.5-pro',
     name: 'Gemini 2.5 Pro',
     provider: 'claude',
     modelId: 'gemini-2.5-pro',
-    maxTokens: 4096,
+    maxTokens: 65535,
     temperature: 0.7,
     supportVision: false,
-    costPerToken: 0.000003,
+    costPerToken: 0.00007,
+    description: 'Google DeepMind于2025年3月发布的旗舰模型，内置推理能力，支持100万tokens上下文窗口。在SWE-bench上表现优异，适用于代码生成、多步骤规划和复杂推理任务。',
   },
   {
     id: 'gemini-2.5-flash',
     name: 'Gemini 2.5 Flash',
     provider: 'claude',
     modelId: 'gemini-2.5-flash',
-    maxTokens: 4096,
+    maxTokens: 65535,
     temperature: 0.7,
     supportVision: false,
-    costPerToken: 0.000003,
+    costPerToken: 0.00002,
+    description: 'Gemini 2.5系列中针对速度和成本进行优化的模型，专为处理日常、高流量任务而设计，追求快速响应 。它同样是一个具备“思考”能力的原生多模态模型 。',
   },
 
   // 智谱AI GLM-4.5系列模型
@@ -574,7 +628,7 @@ export const PROVIDERS: Record<AIProvider, { id: AIProvider; name: string; apiUr
     apiUrl: 'https://api.deepseek.com',
     icon: '🐟',
     color: '#1E40AF',
-    logo: '/claude-logo.png', // 使用现有的claude-logo.png作为临时替代
+    logo: 'https://i.postimg.cc/X7pxk6gK/deepseek-logo.png', // 使用现有的claude-logo.png作为临时替代
     supportStream: true,  
   },
   aliyun: {
@@ -583,7 +637,7 @@ export const PROVIDERS: Record<AIProvider, { id: AIProvider; name: string; apiUr
     apiUrl: 'https://dashscope.aliyuncs.com/api/v1',
     icon: '☁️',
     color: '#FF6600',
-    logo: '/gpt-logo.png', // 使用现有的gpt-logo.png作为临时替代
+    logo: 'https://i.postimg.cc/JhcQzr18/qwen-logo.png', // 使用现有的gpt-logo.png作为临时替代
     supportStream: true,
   },
   volcengine: {
@@ -592,7 +646,7 @@ export const PROVIDERS: Record<AIProvider, { id: AIProvider; name: string; apiUr
     apiUrl: 'https://ark.cn-beijing.volces.com/api/v3',
     icon: '🌋',
     color: '#1890FF',
-    logo: '/bigmodel.png', // 使用现有的bigmodel.png作为临时替代
+    logo: 'https://i.postimg.cc/CLX7vrv3/doubao-logo.png', // 使用现有的bigmodel.png作为临时替代
     supportStream: true,
   },
   kimi: {
@@ -601,7 +655,7 @@ export const PROVIDERS: Record<AIProvider, { id: AIProvider; name: string; apiUr
     apiUrl: 'https://api.moonshot.cn',
     icon: '🌙',
     color: '#6366F1',
-    logo: '/kimi-logo.png',
+    logo: 'https://i.postimg.cc/Sx9rHL3J/kimi-logo.png',
     supportStream: true,
   },
   claude: {
@@ -610,7 +664,7 @@ export const PROVIDERS: Record<AIProvider, { id: AIProvider; name: string; apiUr
     apiUrl: 'https://api.302ai.cn/v1',
     icon: '✨',
     color: '#6A0DAD',
-    logo: '/claude-logo.png',
+    logo: 'https://i.postimg.cc/sfnwWg5D/claude-logo.png',
     supportStream: true,
   },
   bigmodel: {
@@ -619,7 +673,7 @@ export const PROVIDERS: Record<AIProvider, { id: AIProvider; name: string; apiUr
     apiUrl: 'https://open.bigmodel.cn/api/paas/v4',
     icon: '🧠',
     color: '#1E88E5',
-    logo: '/bigmodel.png',
+    logo: 'https://i.postimg.cc/Wz48yBcv/bigmodel.png',
     supportStream: true,
   },
 };
