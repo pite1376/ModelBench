@@ -119,7 +119,7 @@ export const LandingPage: React.FC = () => {
             {/* Logo */}
             <div className="flex items-center space-x-3">
               <img 
-                src="/favicon-96x96.png" 
+                src="https://i.postimg.cc/4y5CvkbR/favicon-96x96.png" 
                 alt="ModelBench" 
                 className="w-8 h-8 rounded"
               />
