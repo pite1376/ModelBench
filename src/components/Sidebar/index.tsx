@@ -208,7 +208,7 @@ export const Sidebar: React.FC = () => {
               className="flex items-center space-x-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded p-1 transition-colors cursor-pointer"
               title="返回首页"
             >
-              <img src="/favicon-96x96.png" alt="ModelBench" className="w-6 h-6 rounded object-contain" />
+              <img src="https://i.postimg.cc/5tbsF8br/web-app-manifest-512x512.png" alt="ModelBench" className="w-6 h-6 rounded object-contain" />
               <span className="text-sm font-medium text-gray-900 dark:text-white">ModelBench</span>
             </button>
                           <button
@@ -226,7 +226,7 @@ export const Sidebar: React.FC = () => {
               className="hover:bg-gray-100 dark:hover:bg-gray-700 rounded p-1 transition-colors cursor-pointer"
               title="返回首页"
             >
-              <img src="/favicon-96x96.png" alt="ModelBench" className="w-8 h-8 rounded object-contain" />
+              <img src="https://i.postimg.cc/5tbsF8br/web-app-manifest-512x512.png" alt="ModelBench" className="w-8 h-8 rounded object-contain" />
             </button>
             <button
               onClick={handleToggleSidebar}
