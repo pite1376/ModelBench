@@ -376,7 +376,7 @@ export const Sidebar: React.FC = () => {
               className="w-full flex items-center space-x-3 p-1 hover:bg-gray-50 dark:hover:bg-gray-700 rounded-lg transition-colors"
             >
             <div className="w-8 h-8 rounded-full overflow-hidden">
-              <img src="/favicon-96x96.png" alt="ModelBench" className="w-full h-full object-cover" />
+              <img src="https://i.postimg.cc/5tbsF8br/web-app-manifest-512x512.png" alt="ModelBench" className="w-full h-full object-cover" />
           </div>
             <div className="flex-1 text-left">
               <div className="text-sm font-medium text-gray-900 dark:text-white">ModelBench</div>
@@ -395,7 +395,7 @@ export const Sidebar: React.FC = () => {
                           className="flex flex-col items-center space-y-2 p-2 hover:bg-gray-50 dark:hover:bg-gray-700 rounded-lg transition-colors w-full"
           >
             <div className="relative">
-              <img src="/favicon-96x96.png" alt="头像" className="w-8 h-8 rounded-full" />
+              <img src="https://i.postimg.cc/5tbsF8br/web-app-manifest-512x512.png" alt="头像" className="w-8 h-8 rounded-full" />
               <div className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-white ${
                 cloudSyncStatus === 'idle' ? 'bg-green-400' :
                 cloudSyncStatus === 'syncing' ? 'bg-yellow-400' :
@@ -431,7 +431,7 @@ export const Sidebar: React.FC = () => {
             <div className="flex items-center justify-between p-2 border-b border-gray-200 dark:border-gray-700">
               <div className="flex items-center space-x-3">
                 <div className="w-10 h-10 rounded-full overflow-hidden">
-                  <img src="/favicon-96x96.png" alt="ModelBench" className="w-full h-full object-cover" />
+                  <img src="https://i.postimg.cc/5tbsF8br/web-app-manifest-512x512.png" alt="ModelBench" className="w-full h-full object-cover" />
                 </div>
                 <div>
                   <h3 className="text-lg font-semibold text-gray-900 dark:text-white">ModelBench</h3>
@@ -649,7 +649,7 @@ export const Sidebar: React.FC = () => {
                     <div className="bg-gray-50 dark:bg-gray-800 rounded-xl p-6 border border-gray-200 dark:border-gray-700">
                       <div className="w-40 h-40 bg-white rounded-lg mx-auto flex items-center justify-center shadow-sm border-2 border-gray-200 p-2">
                         <img 
-                          src="/wx.png" 
+                          src="https://i.postimg.cc/ZnNTvGL4/wx.png" 
                           alt="微信二维码" 
                           className="w-full h-full object-contain"
                         />
