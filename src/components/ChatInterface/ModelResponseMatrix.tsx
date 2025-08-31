@@ -286,21 +286,30 @@ export const ModelResponseMatrix: React.FC<ModelResponseMatrixProps> = ({
                         {/* 对话内容区域 */}
                         <div className="p-4 h-full flex flex-col min-h-0">
                           <div className="flex-1 min-h-0 overflow-y-auto max-h-[400px] space-y-3 scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100 dark:scrollbar-thumb-gray-600 dark:scrollbar-track-gray-800">
-                            {/* 只显示最新的用户消息和AI响应 */}
-                            {(() => {
-                              const lastMessage = messages[messages.length - 1];
-                              if (!lastMessage) return null;
+                            {/* 显示完整的对话历史 */}
+                            {messages.map((message, messageIndex) => {
+                              // 获取当前消息的响应
+                              const isLastMessage = messageIndex === messages.length - 1;
+                              let messageResponse;
+                              
+                              if (isLastMessage) {
+                                // 最新消息使用矩阵响应
+                                messageResponse = response;
+                              } else {
+                                // 历史消息从会话响应中获取（使用标准模型ID）
+                                messageResponse = currentSession?.responses?.[model.id]?.[message.id];
+                              }
 
                               return (
-                                <div className="space-y-2" data-message-id={lastMessage.id}>
+                                <div key={message.id} className="space-y-2" data-message-id={message.id}>
                                   {/* 用户消息 */}
                                   <div>
                                     <div className="text-xs text-gray-500 dark:text-gray-400 mb-1">用户</div>
                                     <div className="bg-blue-50 dark:bg-blue-900/30 p-3 rounded-lg text-sm">
-                                      <div className="whitespace-pre-wrap">{lastMessage.content}</div>
-                                      {lastMessage.images && lastMessage.images.length > 0 && (
+                                      <div className="whitespace-pre-wrap">{message.content}</div>
+                                      {message.images && message.images.length > 0 && (
                                         <div className="mt-2 flex flex-wrap gap-2">
-                                          {lastMessage.images.map((image, idx) => (
+                                          {message.images.map((image, idx) => (
                                             <img
                                               key={idx}
                                               src={image}
@@ -314,40 +323,40 @@ export const ModelResponseMatrix: React.FC<ModelResponseMatrixProps> = ({
                                   </div>
 
                                   {/* AI响应 */}
-                                  {response && (
+                                  {messageResponse && (
                                     <div>
                                       <div className="text-xs text-gray-500 dark:text-gray-400 mb-1 flex items-center space-x-2">
                                         <span>{model.name}</span>
-                                        <span className="text-gray-400 dark:text-gray-500">| {formatTokenAndCost(model.name, response.usage, response.totalResponseTime || response.responseTime)}</span>
-                                        {!response.isComplete && (
+                                        <span className="text-gray-400 dark:text-gray-500">| {formatTokenAndCost(model.name, messageResponse.usage, messageResponse.totalResponseTime || messageResponse.responseTime)}</span>
+                                        {!messageResponse.isComplete && (
                                           <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse"></div>
                                         )}
                                       </div>
                                       {/* 思考过程显示 */}
-                                      {response.reasoning_content && (
+                                      {messageResponse.reasoning_content && (
                                         <ReasoningDisplay 
-                                          content={response.reasoning_content}
-                                          isLoading={!response.isComplete}
+                                          content={messageResponse.reasoning_content}
+                                          isLoading={!messageResponse.isComplete}
                                         />
                                       )}
                                       
                                       <div className="bg-gray-50 dark:bg-gray-700 p-3 rounded-lg text-sm">
-                                        {!response.isComplete ? (
+                                        {!messageResponse.isComplete ? (
                                           <div className="whitespace-pre-wrap text-gray-900 dark:text-gray-100">
                                             <TypewriterEffect 
-                                              text={response.content}
+                                              text={messageResponse.content}
                                               delay={30}
                                             />
                                           </div>
                                         ) : (
-                                          <MarkdownRenderer content={response.content} />
+                                          <MarkdownRenderer content={messageResponse.content} />
                                         )}
                                       </div>
                                     </div>
                                   )}
                                 </div>
                               );
-                            })()}
+                            })}
                           </div>
                         </div>
                       </div>
