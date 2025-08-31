@@ -1117,8 +1117,8 @@ function App() {
       return `${themeId}_${versionId}_${modelId}`;
     };
 
-    // 清空之前的矩阵响应
-    setMatrixResponses({});
+         // 清空之前的矩阵响应（但保留会话历史）
+     setMatrixResponses({});
 
     // 处理上传的图片
     const images: string[] = [];
@@ -1212,13 +1212,16 @@ function App() {
                 startTime: startTime
               };
               
-              setMatrixResponses(prev => ({
-                ...prev,
-                [matrixKey]: initialResponse
-              }));
-              
-              // 同时初始化会话响应
-              addModelResponse(modelId, messageId, initialResponse);
+                             setMatrixResponses(prev => ({
+                 ...prev,
+                 [matrixKey]: initialResponse
+               }));
+               
+               // 只为第一个主题版本保存到会话响应中（避免重复，但保留历史对话功能）
+               const isFirstThemeVersion = theme.id === selectedThemes[0].id && version.id === selectedThemes[0].versions[0].id;
+               if (isFirstThemeVersion) {
+                 addModelResponse(modelId, messageId, initialResponse);
+               }
 
               let service;
               switch (model.provider) {
@@ -1294,10 +1297,13 @@ function App() {
                         totalResponseTime: totalResponseTime,
                         firstByteLatency: firstResponseTime ? firstResponseTime - startTime : undefined,
                         responseTime: chunk.responseTime || totalResponseTime
-                      };
-                      
-                      // 同时保存到会话响应中
-                      updateModelResponse(modelId, messageId, finalResponse);
+                                             };
+                       
+                       // 只为第一个主题版本保存到会话响应中（避免重复，但保留历史对话功能）
+                       const isFirstThemeVersion = theme.id === selectedThemes[0].id && version.id === selectedThemes[0].versions[0].id;
+                       if (isFirstThemeVersion) {
+                         updateModelResponse(modelId, messageId, finalResponse);
+                       }
                       
                       return {
                         ...prev,
@@ -1315,9 +1321,6 @@ function App() {
                           firstResponseTime: firstResponseTime
                         }
                       }));
-                      updateModelResponse(modelId, messageId, {
-                        firstResponseTime: firstResponseTime
-                      });
                     }
                     
                     // 追加流式内容
@@ -1331,20 +1334,23 @@ function App() {
                         cost: 0
                       };
                       
-                      const updatedResponse = {
-                        ...currentResponse,
-                        content: chunk.content ? currentResponse.content + chunk.content : currentResponse.content,
-                        reasoning_content: chunk.reasoning_content ? (currentResponse.reasoning_content || '') + chunk.reasoning_content : currentResponse.reasoning_content,
-                        timestamp: new Date()
-                      };
-                      
-                      // 同时更新会话响应
-                      if (chunk.content) {
-                        appendToModelResponse(modelId, messageId, chunk.content);
-                      }
-                      if (chunk.reasoning_content) {
-                        appendToReasoningContent(modelId, messageId, chunk.reasoning_content);
-                      }
+                                             const updatedResponse = {
+                         ...currentResponse,
+                         content: chunk.content ? (currentResponse.content || '') + chunk.content : (currentResponse.content || ''),
+                         reasoning_content: chunk.reasoning_content ? (currentResponse.reasoning_content || '') + chunk.reasoning_content : (currentResponse.reasoning_content || ''),
+                         timestamp: new Date()
+                                              };
+                       
+                       // 只为第一个主题版本保存到会话响应中（避免重复，但保留历史对话功能）
+                       const isFirstThemeVersion = theme.id === selectedThemes[0].id && version.id === selectedThemes[0].versions[0].id;
+                       if (isFirstThemeVersion) {
+                         if (chunk.content) {
+                           appendToModelResponse(modelId, messageId, chunk.content);
+                         }
+                         if (chunk.reasoning_content) {
+                           appendToReasoningContent(modelId, messageId, chunk.reasoning_content);
+                         }
+                       }
                       
                       return {
                         ...prev,
@@ -1367,30 +1373,33 @@ function App() {
                 // 非流式完成
                 const endTime = Date.now();
                 const totalResponseTime = endTime - startTime;
-                const finalResponse = {
-                  content: response.content,
-                  reasoning_content: (response as any).reasoning_content || '',
-                  isComplete: true,
-                  timestamp: new Date(),
-                  tokenCount: response.tokenCount || response.tokens || 0,
-                  cost: response.cost || 0,
-                  usage: response.usage || {
-                    prompt_tokens: 0,
-                    completion_tokens: response.tokenCount || response.tokens || 0,
-                    total_tokens: response.tokenCount || response.tokens || 0
-                  },
-                  endTime: endTime,
-                  totalResponseTime: totalResponseTime,
-                  responseTime: response.responseTime || totalResponseTime
-                };
+                                 const finalResponse = {
+                   content: response.content || '',
+                   reasoning_content: (response as any).reasoning_content || '',
+                   isComplete: true,
+                   timestamp: new Date(),
+                   tokenCount: response.tokenCount || response.tokens || 0,
+                   cost: response.cost || 0,
+                   usage: response.usage || {
+                     prompt_tokens: 0,
+                     completion_tokens: response.tokenCount || response.tokens || 0,
+                     total_tokens: response.tokenCount || response.tokens || 0
+                   },
+                   endTime: endTime,
+                   totalResponseTime: totalResponseTime,
+                   responseTime: response.responseTime || totalResponseTime
+                 };
 
-                setMatrixResponses(prev => ({
-                  ...prev,
-                  [matrixKey]: finalResponse
-                }));
+                                 setMatrixResponses(prev => ({
+                   ...prev,
+                   [matrixKey]: finalResponse
+                 }));
 
-                // 同时保存到会话响应中
-                updateModelResponse(modelId, messageId, finalResponse);
+                 // 只为第一个主题版本保存到会话响应中（避免重复，但保留历史对话功能）
+                 const isFirstThemeVersion = theme.id === selectedThemes[0].id && version.id === selectedThemes[0].versions[0].id;
+                 if (isFirstThemeVersion) {
+                   updateModelResponse(modelId, messageId, finalResponse);
+                 }
 
                 // 更新统计
                 if (response.tokenCount || response.tokens) {
@@ -1415,23 +1424,26 @@ function App() {
 
             } catch (error: any) {
               // 处理失败
-              const errorResponse = {
-                content: `错误: ${error.message}`,
-                reasoning_content: '',
-                isComplete: true,
-                error: error.message,
-                timestamp: new Date(),
-                tokenCount: 0,
-                cost: 0
-              };
+                             const errorResponse = {
+                 content: `错误: ${error.message || '未知错误'}`,
+                 reasoning_content: '',
+                 isComplete: true,
+                 error: error.message || '未知错误',
+                 timestamp: new Date(),
+                 tokenCount: 0,
+                 cost: 0
+               };
               
-              setMatrixResponses(prev => ({
-                ...prev,
-                [matrixKey]: errorResponse
-              }));
-              
-              // 同时保存到会话响应中
-              updateModelResponse(modelId, messageId, errorResponse);
+                             setMatrixResponses(prev => ({
+                 ...prev,
+                 [matrixKey]: errorResponse
+               }));
+               
+               // 只为第一个主题版本保存到会话响应中（避免重复，但保留历史对话功能）
+               const isFirstThemeVersion = theme.id === selectedThemes[0].id && version.id === selectedThemes[0].versions[0].id;
+               if (isFirstThemeVersion) {
+                 updateModelResponse(modelId, messageId, errorResponse);
+               }
             }
           })());
         }
