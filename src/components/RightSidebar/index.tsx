@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, Maximize2, Minimize2, Paperclip, Loader2, CheckCircle, Globe, Plus } from 'lucide-react';
+import { Send, Maximize2, Minimize2, Paperclip, Loader2, CheckCircle, Globe, Plus, RefreshCw } from 'lucide-react';
 import { useAppStore } from '@/store';
 import { AVAILABLE_MODELS, PROVIDERS } from '@/lib/models';
 import { toast } from 'sonner';
@@ -19,6 +19,8 @@ interface RightSidebarProps {
 
 const RightSidebar: React.FC<RightSidebarProps> = ({
   onSendMessage,
+  onNewSession,
+  onRestartLastMessage,
   onFileUpload,
   removeFile,
   currentSession,
@@ -75,20 +77,29 @@ const RightSidebar: React.FC<RightSidebarProps> = ({
 
   // 输入框状态
   const [inputExpanded, setInputExpanded] = useState(false);
+  
+  // 计算模型状态按钮的行数
+  const getModelStatusRows = () => {
+    if (!hasModelStatus) return 0;
+    const buttonWidth = 120; // 预估每个按钮的宽度
+    const containerWidth = 400; // 预估容器宽度
+    const buttonsPerRow = Math.floor(containerWidth / buttonWidth);
+    return Math.ceil(selectedModels.length / buttonsPerRow);
+  };
 
   // 计算动态高度
   const getContainerHeight = () => {
-    if (inputExpanded) {
-      return '380px'; // 180px + 200px
-    }
-    return '180px';
+    const modelStatusRows = getModelStatusRows();
+    // 确保基础高度足够显示输入框和工具栏
+    const baseHeight = inputExpanded ? 360 : 170; 
+    const extraHeightForModelStatus = Math.max(0, modelStatusRows - 1) * 35; // 每额外行增加35px
+    return `${baseHeight + extraHeightForModelStatus}px`;
   };
 
   const getInputAreaHeight = () => {
-    if (inputExpanded) {
-      return hasModelStatus ? '320px' : '340px'; // 为模型状态按钮留出空间
-    }
-    return hasModelStatus ? '120px' : '140px';
+    // 确保输入区域有足够高度
+    const baseHeight = inputExpanded ? 320 : 130; 
+    return `${baseHeight}px`;
   };
 
 
@@ -158,6 +169,26 @@ const RightSidebar: React.FC<RightSidebarProps> = ({
     }
   };
 
+  // 重新生成响应
+  const handleRegenerate = () => {
+    if (!currentSessionData?.messages?.length) {
+      toast.error('没有可重新生成的消息');
+      return;
+    }
+    
+    if (selectedModels.length === 0) {
+      toast.error('请至少选择一个模型进行对比');
+      return;
+    }
+    
+    if (onRestartLastMessage) {
+      onRestartLastMessage();
+      toast.success('正在重新生成响应...');
+    } else {
+      toast.error('重新生成功能暂不可用');
+    }
+  };
+
   // 检查是否有模型状态需要显示
   const hasModelStatus = selectedModels.length > 0 && currentSessionData?.messages && currentSessionData.messages.length > 0;
 
@@ -166,9 +197,10 @@ const RightSidebar: React.FC<RightSidebarProps> = ({
       className="bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 flex flex-col transition-all duration-300" 
       style={{ height: getContainerHeight() }}
     >
-      {/* 模型状态按钮区域 - 只显示按钮，无标题和分割线 */}      {hasModelStatus && (
-        <div className="px-1.5 flex-shrink-0" style={{ paddingTop: '6px'}}>
-          <div className="flex flex-wrap gap-2">
+      {/* 模型状态按钮区域 - 只显示按钮，无标题和分割线 */}
+      {hasModelStatus && (
+        <div className="px-3 py-1.5 flex-shrink-0">
+          <div className="flex flex-wrap gap-2 justify-start">
             {selectedModels.map((modelId) => {
               const model = getAllModels().find(m => m.id === modelId);
               if (!model) return null;
@@ -184,24 +216,26 @@ const RightSidebar: React.FC<RightSidebarProps> = ({
                 <button
                   key={modelId}
                   onClick={() => scrollToModel(modelId)}
-                  className="flex items-center space-x-2 px-3 py-1.5 bg-gray-50 dark:bg-gray-700/50 hover:bg-gray-100 dark:hover:bg-gray-600/50 rounded-lg border border-gray-200/60 dark:border-gray-600/60 transition-all duration-200 text-sm"
+                  className="flex items-center space-x-2 px-3 py-1.5 bg-gray-50 dark:bg-gray-700/50 hover:bg-gray-100 dark:hover:bg-gray-600/50 rounded-lg border border-gray-200/60 dark:border-gray-600/60 transition-all duration-200 text-sm min-w-0 max-w-[140px]"
                 >
                   <div 
-                    className="w-2 h-2 rounded-full"
+                    className="w-2 h-2 rounded-full flex-shrink-0"
                     style={{ backgroundColor: provider.color }}
                   />
-                  <span className="text-gray-900 dark:text-white font-medium">
+                  <span className="text-gray-900 dark:text-white font-medium truncate">
                     {model.name}
                   </span>
-                  {isModelLoading && (
-                    <Loader2 size={12} className="text-blue-500 animate-spin" />
-                  )}
-                  {isComplete && !hasError && (
-                    <CheckCircle size={12} className="text-green-500" />
-                  )}
-                  {hasError && (
-                    <div className="w-3 h-3 rounded-full bg-red-500" title={`错误: ${response.error}`} />
-                  )}
+                  <div className="flex-shrink-0">
+                    {isModelLoading && (
+                      <Loader2 size={12} className="text-blue-500 animate-spin" />
+                    )}
+                    {isComplete && !hasError && (
+                      <CheckCircle size={12} className="text-green-500" />
+                    )}
+                    {hasError && (
+                      <div className="w-3 h-3 rounded-full bg-red-500" title={`错误: ${response.error}`} />
+                    )}
+                  </div>
                 </button>
               );
             })}
@@ -211,7 +245,7 @@ const RightSidebar: React.FC<RightSidebarProps> = ({
 
       {/* 输入区域 */}
       <div 
-        className="p-1.5 flex-1 flex flex-col transition-all duration-300" 
+        className="px-3 py-1.5 flex-1 flex flex-col justify-between transition-all duration-300" 
         style={{ height: getInputAreaHeight() }}
       >
         {/* 文件预览 */}
@@ -238,28 +272,31 @@ const RightSidebar: React.FC<RightSidebarProps> = ({
           </div>
         )}
 
-        {/* 输入框 */}
-        <div className="relative bg-gray-50 dark:bg-gray-700/50 rounded-xl border border-gray-200 dark:border-gray-600 p-3 flex-1">
-          <textarea
-            value={inputMessage}
-            onChange={(e) => setInputMessage(e.target.value)}
-            placeholder="输入您的问题..."
-            className="w-full bg-transparent text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 resize-none focus:outline-none text-sm leading-relaxed"
-            rows={inputExpanded ? 8 : (hasModelStatus ? 1 : 2)}
-            style={{
-              maxHeight: inputExpanded ? '250px' : (hasModelStatus ? '50px' : '70px'),
-              minHeight: inputExpanded ? '250px' : (hasModelStatus ? '50px' : '60px')
-            }}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault();
-                handleSendClick();
-              }
-            }}
-          />
+        {/* 输入框容器 */}
+        <div className="flex flex-col flex-1">
+          {/* 输入框 */}
+          <div className="relative bg-gray-50 dark:bg-gray-700/50 rounded-xl border border-gray-200 dark:border-gray-600 p-3 flex-1 mb-2">
+            <textarea
+              value={inputMessage}
+              onChange={(e) => setInputMessage(e.target.value)}
+              placeholder="输入您的问题..."
+              className="w-full bg-transparent text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 resize-none focus:outline-none text-sm leading-relaxed"
+              rows={inputExpanded ? 8 : (hasModelStatus ? 1 : 2)}
+              style={{
+                maxHeight: inputExpanded ? '250px' : (hasModelStatus ? '50px' : '70px'),
+                minHeight: inputExpanded ? '250px' : (hasModelStatus ? '50px' : '60px')
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault();
+                  handleSendClick();
+                }
+              }}
+            />
+          </div>
           
-          {/* 底部工具栏 - 重新排列按钮布局 */}
-          <div className="flex items-center justify-between mt-2 pt-2">
+          {/* 底部工具栏 - 紧贴输入框 */}
+          <div className="flex items-center justify-between">
             <div className="flex items-center space-x-2">
               {/* 提示文字移到左侧 */}
               <span className="text-xs text-gray-400 dark:text-gray-500">
@@ -268,6 +305,15 @@ const RightSidebar: React.FC<RightSidebarProps> = ({
             </div>
             
             <div className="flex items-center space-x-1">
+              {/* 展开/收起按钮 - 移到最左侧 */}
+              <button
+                onClick={() => setInputExpanded(!inputExpanded)}
+                className="p-1.5 text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 transition-colors rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600"
+                title={inputExpanded ? '收起' : '展开'}
+              >
+                {inputExpanded ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
+              </button>
+              
               {/* 上传文件按钮 */}
               <label className="p-1.5 text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 cursor-pointer transition-colors rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600" title="上传文件">
                 <input
@@ -304,7 +350,11 @@ const RightSidebar: React.FC<RightSidebarProps> = ({
               {/* 新建对话按钮 */}
               <button
                 onClick={() => {
-                  createNewSession();
+                  if (onNewSession) {
+                    onNewSession();
+                  } else {
+                    createNewSession();
+                  }
                 }}
                 className="p-1.5 text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 transition-colors rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600"
                 title="新建对话"
@@ -312,13 +362,14 @@ const RightSidebar: React.FC<RightSidebarProps> = ({
                 <Plus size={14} />
               </button>
               
-              {/* 展开/收起按钮 */}
+              {/* 重新生成按钮 */}
               <button
-                onClick={() => setInputExpanded(!inputExpanded)}
-                className="p-1.5 text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 transition-colors rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600"
-                title={inputExpanded ? '收起' : '展开'}
+                onClick={handleRegenerate}
+                disabled={!currentSessionData?.messages?.length || isLoading}
+                className="p-1.5 text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 transition-colors rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed"
+                title="重新生成最后一次响应"
               >
-                {inputExpanded ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
+                <RefreshCw size={14} />
               </button>
               
               {/* 发送按钮 */}
