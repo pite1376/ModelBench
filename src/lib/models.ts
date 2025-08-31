@@ -237,17 +237,7 @@ export const AVAILABLE_MODELS: ModelConfig[] = [
   },
 
   // Kimi (Moonshot) 模型
-  {
-    id: 'kimi-k2',
-    name: 'Kimi K2',
-    provider: 'kimi',
-    modelId: 'kimi-k2',
-    maxTokens: 16384, // 128k上下文，保守设置输出长度
-    temperature: 0.3,
-    supportVision: false,
-    costPerToken: 0.00008, // 80美元/1M tokens
-    description: '上下文长度 128k，具备超强代码和 Agent 能力的 MoE 架构基础模型，总参数 1T，激活参数 32B。在通用知识推理、编程、数学、Agent 等主要类别的基准性能测试中，K2 模型的性能超过其他主流开源模型。',
-  },
+  
   {
     id: 'kimi-k2-0711-preview',
     name: 'Kimi K2 0711 Preview',
