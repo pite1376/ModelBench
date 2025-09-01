@@ -77,6 +77,17 @@ const RightSidebar: React.FC<RightSidebarProps> = ({
 
   // 输入框状态
   const [inputExpanded, setInputExpanded] = useState(false);
+  const [windowHeight, setWindowHeight] = useState(window.innerHeight);
+
+  // 监听窗口大小变化
+  useEffect(() => {
+    const handleResize = () => {
+      setWindowHeight(window.innerHeight);
+    };
+    
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
   
   // 计算模型状态按钮的行数
   const getModelStatusRows = () => {
@@ -90,15 +101,17 @@ const RightSidebar: React.FC<RightSidebarProps> = ({
   // 计算动态高度
   const getContainerHeight = () => {
     const modelStatusRows = getModelStatusRows();
-    // 确保基础高度足够显示输入框和工具栏
-    const baseHeight = inputExpanded ? 360 : 170; 
+    const baseHeight = inputExpanded ? 320 : 170; // 减少展开模式的基础高度
     const extraHeightForModelStatus = Math.max(0, modelStatusRows - 1) * 35; // 每额外行增加35px
-    return `${baseHeight + extraHeightForModelStatus}px`;
+    const totalHeight = baseHeight + extraHeightForModelStatus;
+    
+    // 限制最大高度，确保不超出屏幕（预留底部空间）
+    const maxHeight = Math.min(totalHeight, windowHeight * 0.55); // 最大占屏幕55%
+    return `${maxHeight}px`;
   };
 
   const getInputAreaHeight = () => {
-    // 确保输入区域有足够高度
-    const baseHeight = inputExpanded ? 320 : 130; 
+    const baseHeight = inputExpanded ? 280 : 130; // 减少展开模式输入区域高度
     return `${baseHeight}px`;
   };
 
@@ -281,11 +294,11 @@ const RightSidebar: React.FC<RightSidebarProps> = ({
               onChange={(e) => setInputMessage(e.target.value)}
               placeholder="输入您的问题..."
               className="w-full bg-transparent text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 resize-none focus:outline-none text-sm leading-relaxed"
-              rows={inputExpanded ? 8 : (hasModelStatus ? 1 : 2)}
-              style={{
-                maxHeight: inputExpanded ? '250px' : (hasModelStatus ? '50px' : '70px'),
-                minHeight: inputExpanded ? '250px' : (hasModelStatus ? '50px' : '60px')
-              }}
+                          rows={inputExpanded ? 6 : (hasModelStatus ? 1 : 2)}
+            style={{
+              maxHeight: inputExpanded ? '200px' : (hasModelStatus ? '50px' : '70px'),
+              minHeight: inputExpanded ? '200px' : (hasModelStatus ? '50px' : '60px')
+            }}
               onKeyDown={(e) => {
                 if (e.key === 'Enter' && !e.shiftKey) {
                   e.preventDefault();
